@@ -1,0 +1,853 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>MPDF Editor</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.0.379/pdf.min.mjs" type="module"></script>
+<style>
+:root{
+  --bg:#1e1e2e;--bg2:#2a2a3d;--bg3:#343450;--accent:#4fc3f7;--accent2:#81d4fa;
+  --text:#e0e0e0;--text2:#a0a0b8;--border:#3a3a52;--surface:#fff;
+  --shadow:0 2px 12px rgba(0,0,0,0.3);--radius:8px;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--bg);color:var(--text);overflow:hidden;height:100vh;display:flex;flex-direction:column}
+
+/* ── Header ── */
+.header{background:var(--bg2);border-bottom:1px solid var(--border);padding:0 16px;display:flex;align-items:center;height:48px;gap:8px;flex-shrink:0;z-index:100}
+.logo{font-weight:700;font-size:16px;color:var(--accent);margin-right:12px;letter-spacing:0.5px}
+.header-sep{width:1px;height:24px;background:var(--border);margin:0 4px}
+
+.btn{background:var(--bg3);border:1px solid var(--border);color:var(--text);padding:6px 14px;border-radius:6px;font-size:13px;cursor:pointer;display:inline-flex;align-items:center;gap:6px;transition:all 0.15s;white-space:nowrap}
+.btn:hover{background:var(--accent);color:var(--bg);border-color:var(--accent)}
+.btn-primary{background:var(--accent);color:var(--bg);border-color:var(--accent);font-weight:600}
+.btn-primary:hover{background:var(--accent2)}
+.btn svg{width:16px;height:16px;fill:currentColor}
+.btn-icon{padding:6px 8px}
+
+.header-right{margin-left:auto;display:flex;gap:6px;align-items:center}
+.zoom-group{display:flex;align-items:center;gap:2px;background:var(--bg3);border-radius:6px;border:1px solid var(--border);padding:2px}
+.zoom-group .btn{border:none;background:transparent;padding:4px 8px;border-radius:4px}
+.zoom-group .btn:hover{background:rgba(79,195,247,0.2);color:var(--accent)}
+.zoom-label{font-size:12px;min-width:42px;text-align:center;color:var(--text2)}
+
+/* ── Main Layout ── */
+.main{display:flex;flex:1;overflow:hidden}
+
+/* ── Sidebar ── */
+.sidebar{width:180px;background:var(--bg2);border-right:1px solid var(--border);display:flex;flex-direction:column;flex-shrink:0}
+.sidebar-header{padding:12px;font-size:12px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:0.5px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center}
+.sidebar-header .btn{padding:3px 8px;font-size:11px}
+.page-list{flex:1;overflow-y:auto;padding:8px}
+.page-thumb{background:var(--surface);border-radius:6px;margin-bottom:8px;cursor:pointer;border:2px solid transparent;transition:border-color 0.15s;position:relative;overflow:hidden}
+.page-thumb.active{border-color:var(--accent)}
+.page-thumb:hover{border-color:var(--accent2)}
+.page-thumb-inner{padding:8px;min-height:80px;font-size:7px;color:#333;line-height:1.3;font-family:Georgia,serif;overflow:hidden}
+.page-thumb-inner h1,.page-thumb-inner h2,.page-thumb-inner h3{font-size:8px;margin-bottom:2px}
+.page-thumb-inner img{max-width:100%;height:auto;max-height:30px}
+.page-thumb-label{position:absolute;bottom:4px;right:6px;font-size:10px;color:var(--text2);background:rgba(0,0,0,0.5);padding:1px 5px;border-radius:3px}
+.page-thumb .delete-page{position:absolute;top:4px;right:4px;width:18px;height:18px;border-radius:50%;background:rgba(255,60,60,0.8);color:#fff;border:none;cursor:pointer;font-size:11px;display:none;align-items:center;justify-content:center;line-height:1}
+.page-thumb:hover .delete-page{display:flex}
+
+/* ── Canvas Area ── */
+.canvas-area{flex:1;overflow:auto;background:#2c2c3a;display:flex;justify-content:center;padding:32px}
+.canvas-scroll{display:flex;flex-direction:column;align-items:center;gap:24px;min-width:min-content}
+
+/* ── Page ── */
+.page{background:var(--surface);box-shadow:var(--shadow);border-radius:4px;position:relative;width:794px;min-height:1123px;transform-origin:top center;transition:transform 0.15s}
+.page-content{padding:60px 70px;min-height:1123px;font-family:Georgia,'Times New Roman',serif;font-size:16px;line-height:1.8;color:#1a1a1a;outline:none}
+.page-content:focus{outline:none}
+.page-content h1{font-size:28px;text-align:center;margin-bottom:0.8em;line-height:1.3;outline:none}
+.page-content h2{font-size:22px;margin-top:1.2em;margin-bottom:0.6em;line-height:1.3;outline:none}
+.page-content h3{font-size:18px;margin-top:1em;margin-bottom:0.6em;line-height:1.3;outline:none}
+.page-content p{margin-bottom:1em;text-align:justify;outline:none}
+.page-content figure{margin:1.5em auto;text-align:center}
+.page-content figure img{max-width:100%;height:auto;border:1px solid #ddd;border-radius:3px;cursor:pointer}
+.page-content figure img:hover{border-color:var(--accent)}
+.page-content figure figcaption{font-size:13px;color:#666;margin-top:8px;font-style:italic;outline:none}
+.page-content hr{border:none;border-top:1px solid #ccc;margin:2em 0}
+.page-content [contenteditable]:empty::before{content:attr(data-placeholder);color:#bbb;pointer-events:none}
+
+/* ── Drop Zone ── */
+.drop-zone{border:2px dashed var(--accent);border-radius:8px;padding:24px;text-align:center;color:var(--accent);font-size:14px;margin:16px 0;background:rgba(79,195,247,0.05);cursor:pointer;transition:all 0.15s}
+.drop-zone:hover,.drop-zone.drag-over{background:rgba(79,195,247,0.12);border-color:var(--accent2)}
+.drop-zone svg{width:32px;height:32px;fill:var(--accent);margin-bottom:8px;display:block;margin:0 auto 8px}
+
+/* ── Element Toolbar ── */
+.element-toolbar{position:absolute;left:-44px;top:0;display:flex;flex-direction:column;gap:4px;opacity:0;transition:opacity 0.15s}
+.page:hover .element-toolbar{opacity:1}
+.element-toolbar .btn{padding:4px;border-radius:4px;width:32px;height:32px;display:flex;align-items:center;justify-content:center}
+
+/* ── Modal ── */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.6);display:none;align-items:center;justify-content:center;z-index:1000}
+.modal-overlay.active{display:flex}
+.modal{background:var(--bg2);border-radius:12px;border:1px solid var(--border);padding:24px;max-width:500px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,0.4)}
+.modal h2{font-size:18px;margin-bottom:16px;color:var(--accent)}
+.modal p{color:var(--text2);font-size:14px;margin-bottom:16px;line-height:1.5}
+.modal-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:20px}
+
+.file-drop{border:2px dashed var(--border);border-radius:8px;padding:40px;text-align:center;color:var(--text2);cursor:pointer;transition:all 0.15s;margin-bottom:16px}
+.file-drop:hover,.file-drop.drag-over{border-color:var(--accent);color:var(--accent);background:rgba(79,195,247,0.05)}
+.file-drop input{display:none}
+
+/* ── Toast ── */
+.toast{position:fixed;bottom:24px;right:24px;background:var(--bg3);border:1px solid var(--border);color:var(--text);padding:12px 20px;border-radius:8px;font-size:14px;z-index:2000;transform:translateY(100px);opacity:0;transition:all 0.3s}
+.toast.show{transform:translateY(0);opacity:1}
+.toast.success{border-color:var(--accent);color:var(--accent)}
+
+/* ── Formatting Bar ── */
+.format-bar{display:flex;gap:2px;align-items:center}
+.format-bar .btn{padding:4px 10px;font-size:12px}
+.format-bar select{background:var(--bg3);border:1px solid var(--border);color:var(--text);padding:4px 8px;border-radius:4px;font-size:12px;cursor:pointer}
+.format-bar select:hover{border-color:var(--accent)}
+
+/* ── Context Menu ── */
+.context-menu{position:fixed;background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:4px;z-index:500;box-shadow:0 4px 16px rgba(0,0,0,0.3);min-width:160px;display:none}
+.context-menu.active{display:block}
+.context-menu button{display:block;width:100%;text-align:left;background:none;border:none;color:var(--text);padding:8px 12px;font-size:13px;cursor:pointer;border-radius:4px}
+.context-menu button:hover{background:var(--bg3);color:var(--accent)}
+.context-menu hr{border:none;border-top:1px solid var(--border);margin:4px 0}
+
+/* ── Loading ── */
+.loading{display:flex;align-items:center;gap:8px;color:var(--text2);font-size:14px}
+.spinner{width:18px;height:18px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin 0.6s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* scrollbar */
+::-webkit-scrollbar{width:8px;height:8px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--bg3);border-radius:4px}
+::-webkit-scrollbar-thumb:hover{background:var(--accent)}
+</style>
+</head>
+<body>
+
+<!-- Header / Toolbar -->
+<header class="header">
+  <span class="logo">MPDF Editor</span>
+  <div class="header-sep"></div>
+
+  <button class="btn" onclick="editor.newDocument()" title="New Document">
+    <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6zM13 9V3.5L18.5 9H13z"/></svg>
+    New
+  </button>
+  <button class="btn" onclick="editor.openFile()" title="Open .mpdf">
+    <svg viewBox="0 0 24 24"><path d="M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h5l2 2h7a2 2 0 012 2v10a2 2 0 01-2 2z"/></svg>
+    Open
+  </button>
+  <button class="btn" onclick="editor.importPDF()" title="Import PDF">
+    <svg viewBox="0 0 24 24"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 14l-5-5h3V8h4v4h3l-5 5z"/></svg>
+    Import PDF
+  </button>
+
+  <div class="header-sep"></div>
+
+  <div class="format-bar">
+    <select id="blockType" onchange="editor.setBlockType(this.value)" title="Block Type">
+      <option value="p">Paragraph</option>
+      <option value="h1">Heading 1</option>
+      <option value="h2">Heading 2</option>
+      <option value="h3">Heading 3</option>
+    </select>
+    <button class="btn btn-icon" onclick="editor.addGifToPage()" title="Insert GIF">
+      <svg viewBox="0 0 24 24"><path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/></svg>
+    </button>
+    <button class="btn btn-icon" onclick="editor.addSeparator()" title="Insert Separator">
+      <svg viewBox="0 0 24 24"><path d="M4 11h16v2H4z"/></svg>
+    </button>
+  </div>
+
+  <div class="header-right">
+    <div class="zoom-group">
+      <button class="btn" onclick="editor.zoomOut()">−</button>
+      <span class="zoom-label" id="zoomLabel">100%</span>
+      <button class="btn" onclick="editor.zoomIn()">+</button>
+    </div>
+    <div class="header-sep"></div>
+    <button class="btn btn-primary" onclick="editor.exportMPDF()" title="Export as .mpdf">
+      <svg viewBox="0 0 24 24"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z" fill="currentColor"/></svg>
+      Export .mpdf
+    </button>
+  </div>
+</header>
+
+<!-- Main -->
+<div class="main">
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="sidebar-header">
+      Pages
+      <button class="btn" onclick="editor.addPage()">+ Add</button>
+    </div>
+    <div class="page-list" id="pageList"></div>
+  </aside>
+
+  <!-- Canvas -->
+  <div class="canvas-area" id="canvasArea">
+    <div class="canvas-scroll" id="canvasScroll"></div>
+  </div>
+</div>
+
+<!-- Import PDF Modal -->
+<div class="modal-overlay" id="importModal">
+  <div class="modal">
+    <h2>Import PDF</h2>
+    <p>Upload a PDF file. Each page will be converted to an MPDF page. You can then add animated GIFs.</p>
+    <div class="file-drop" id="pdfDrop" onclick="document.getElementById('pdfInput').click()">
+      <svg viewBox="0 0 24 24" width="40" height="40" fill="currentColor" style="display:block;margin:0 auto 8px"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 14l-5-5h3V8h4v4h3l-5 5z"/></svg>
+      Drop PDF here or click to browse
+      <input type="file" id="pdfInput" accept=".pdf" onchange="editor.handlePDFFile(this.files[0])">
+    </div>
+    <div id="importProgress" style="display:none">
+      <div class="loading"><div class="spinner"></div><span id="importStatus">Converting...</span></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn" onclick="editor.closeModal('importModal')">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- Open MPDF Modal -->
+<div class="modal-overlay" id="openModal">
+  <div class="modal">
+    <h2>Open MPDF</h2>
+    <div class="file-drop" id="mpdfDrop" onclick="document.getElementById('mpdfInput').click()">
+      <svg viewBox="0 0 24 24" width="40" height="40" fill="currentColor" style="display:block;margin:0 auto 8px"><path d="M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h5l2 2h7a2 2 0 012 2v10a2 2 0 01-2 2z"/></svg>
+      Drop .mpdf file here or click to browse
+      <input type="file" id="mpdfInput" accept=".mpdf,.html" onchange="editor.handleMPDFFile(this.files[0])">
+    </div>
+    <div class="modal-actions">
+      <button class="btn" onclick="editor.closeModal('openModal')">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- GIF Insert Modal -->
+<div class="modal-overlay" id="gifModal">
+  <div class="modal">
+    <h2>Insert Animated GIF</h2>
+    <div class="file-drop" id="gifDrop" onclick="document.getElementById('gifInput').click()">
+      <svg viewBox="0 0 24 24" width="40" height="40" fill="currentColor" style="display:block;margin:0 auto 8px"><path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/></svg>
+      Drop GIF here or click to browse
+      <input type="file" id="gifInput" accept=".gif,image/gif" onchange="editor.handleGIFFile(this.files[0])">
+    </div>
+    <div style="margin-bottom:12px">
+      <label style="font-size:13px;color:var(--text2)">Caption (optional)</label>
+      <input type="text" id="gifCaption" placeholder="Figure 1: Description..." style="width:100%;padding:8px;margin-top:4px;background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:6px;font-size:14px">
+    </div>
+    <div class="modal-actions">
+      <button class="btn" onclick="editor.closeModal('gifModal')">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<!-- Context Menu -->
+<div class="context-menu" id="contextMenu">
+  <button onclick="editor.contextAction('addTextAbove')">Add paragraph above</button>
+  <button onclick="editor.contextAction('addTextBelow')">Add paragraph below</button>
+  <hr>
+  <button onclick="editor.contextAction('addGif')">Insert GIF here</button>
+  <button onclick="editor.contextAction('addSeparator')">Insert separator</button>
+  <hr>
+  <button onclick="editor.contextAction('delete')" style="color:#ff6b6b">Delete element</button>
+</div>
+
+<script type="module">
+
+// ─── MPDF Standard Stylesheet ───────────────────────────────────────────────
+const MPDF_CSS = `*{margin:0;padding:0;box-sizing:border-box}body{background:#f0f0f0;font-family:Georgia,'Times New Roman',Times,serif;font-size:16px;line-height:1.8;color:#1a1a1a;padding:40px 20px}.mpdf-document{max-width:800px;margin:0 auto}.mpdf-page{background:#fff;padding:60px 70px;margin-bottom:30px;box-shadow:0 2px 8px rgba(0,0,0,0.12);position:relative;min-height:900px;page-break-after:always}.mpdf-heading{font-family:Georgia,'Times New Roman',Times,serif;margin-bottom:0.6em;line-height:1.3}h1.mpdf-heading{font-size:28px;text-align:center;margin-bottom:0.8em}h2.mpdf-heading{font-size:22px;margin-top:1.2em}h3.mpdf-heading{font-size:18px;margin-top:1em}.mpdf-text{margin-bottom:1em;text-align:justify;hyphens:auto}.mpdf-gif,.mpdf-image{margin:1.5em auto;text-align:center}.mpdf-gif img,.mpdf-image img{max-width:100%;height:auto;border:1px solid #ddd;border-radius:3px}.mpdf-gif figcaption,.mpdf-image figcaption{font-size:13px;color:#666;margin-top:8px;font-style:italic}.mpdf-separator{border:none;border-top:1px solid #ccc;margin:2em 0}@media(max-width:600px){.mpdf-page{padding:30px 25px}h1.mpdf-heading{font-size:22px}body{padding:10px}}@media print{body{background:#fff;padding:0}.mpdf-page{box-shadow:none;padding:40px 50px;margin:0}.mpdf-gif img{max-height:400px}}@media(prefers-color-scheme:dark){body{background:#1e1e1e}.mpdf-page{background:#2d2d2d;color:#e0e0e0;box-shadow:0 2px 8px rgba(0,0,0,0.4)}.mpdf-gif img,.mpdf-image img{border-color:#444}.mpdf-gif figcaption,.mpdf-image figcaption{color:#999}.mpdf-separator{border-color:#444}}`;
+
+function esc(t) { return t.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+// ─── Editor ─────────────────────────────────────────────────────────────────
+class MPDFEditor {
+  constructor() {
+    this.pages = [];
+    this.activePage = 0;
+    this.zoom = 1;
+    this.contextTarget = null;
+    this.title = 'Untitled Document';
+    this.author = '';
+    this.init();
+  }
+
+  init() {
+    this.addPage();
+    this.setupDragDrop();
+    this.setupContextMenu();
+    this.setupKeyboard();
+    this.render();
+  }
+
+  // ── Pages ──
+  addPage() {
+    this.pages.push([
+      { type: 'h1', text: this.pages.length === 0 ? 'Document Title' : '' },
+      { type: 'p', text: this.pages.length === 0 ? 'Start typing your content here...' : '' }
+    ]);
+    this.activePage = this.pages.length - 1;
+    this.render();
+  }
+
+  deletePage(idx) {
+    if (this.pages.length <= 1) return;
+    this.pages.splice(idx, 1);
+    if (this.activePage >= this.pages.length) this.activePage = this.pages.length - 1;
+    this.render();
+  }
+
+  switchPage(idx) {
+    this.saveCurrent();
+    this.activePage = idx;
+    this.render();
+    document.querySelectorAll('.page')[idx]?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+
+  // ── Render ──
+  render() {
+    this.renderPages();
+    this.renderThumbnails();
+  }
+
+  renderPages() {
+    const scroll = document.getElementById('canvasScroll');
+    scroll.innerHTML = '';
+    this.pages.forEach((page, pi) => {
+      const pageEl = document.createElement('div');
+      pageEl.className = 'page';
+      pageEl.style.transform = `scale(${this.zoom})`;
+      pageEl.style.marginBottom = `${(this.zoom - 1) * 1123 + 24}px`;
+
+      const content = document.createElement('div');
+      content.className = 'page-content';
+      content.dataset.pageIndex = pi;
+
+      page.forEach((el, ei) => {
+        const elem = this.createElementDOM(el, pi, ei);
+        content.appendChild(elem);
+      });
+
+      // Drop zone at bottom
+      const drop = document.createElement('div');
+      drop.className = 'drop-zone';
+      drop.innerHTML = `<svg viewBox="0 0 24 24"><path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/></svg>Drop GIF here or click to add`;
+      drop.addEventListener('click', () => { this.activePage = pi; this.addGifToPage(); });
+      drop.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('drag-over'); });
+      drop.addEventListener('dragleave', () => drop.classList.remove('drag-over'));
+      drop.addEventListener('drop', e => {
+        e.preventDefault();
+        drop.classList.remove('drag-over');
+        const file = e.dataTransfer.files[0];
+        if (file && file.type === 'image/gif') {
+          this.activePage = pi;
+          this.insertGifFile(file, '');
+        }
+      });
+      content.appendChild(drop);
+
+      pageEl.appendChild(content);
+      scroll.appendChild(pageEl);
+    });
+  }
+
+  createElementDOM(el, pageIdx, elemIdx) {
+    const wrapper = document.createElement('div');
+    wrapper.dataset.elemIndex = elemIdx;
+    wrapper.style.position = 'relative';
+
+    if (el.type === 'gif' || el.type === 'image') {
+      const figure = document.createElement('figure');
+      figure.style.margin = '1.5em auto';
+      figure.style.textAlign = 'center';
+      const img = document.createElement('img');
+      img.src = el.src;
+      img.alt = el.alt || 'Image';
+      img.style.maxWidth = '100%';
+      img.style.border = '1px solid #ddd';
+      img.style.borderRadius = '3px';
+      img.draggable = false;
+      figure.appendChild(img);
+      if (el.caption !== undefined) {
+        const cap = document.createElement('figcaption');
+        cap.contentEditable = true;
+        cap.textContent = el.caption;
+        cap.style.fontSize = '13px';
+        cap.style.color = '#666';
+        cap.style.marginTop = '8px';
+        cap.style.fontStyle = 'italic';
+        cap.dataset.placeholder = 'Add caption...';
+        cap.addEventListener('blur', () => {
+          this.pages[pageIdx][elemIdx].caption = cap.textContent;
+        });
+        figure.appendChild(cap);
+      }
+      wrapper.appendChild(figure);
+    } else if (el.type === 'hr') {
+      const hr = document.createElement('hr');
+      hr.style.border = 'none';
+      hr.style.borderTop = '1px solid #ccc';
+      hr.style.margin = '2em 0';
+      wrapper.appendChild(hr);
+    } else {
+      const tag = document.createElement(el.type === 'p' ? 'p' : el.type);
+      tag.contentEditable = true;
+      tag.textContent = el.text || '';
+      tag.dataset.placeholder = el.type === 'h1' ? 'Heading 1' : el.type === 'h2' ? 'Heading 2' : el.type === 'h3' ? 'Heading 3' : 'Type something...';
+      tag.addEventListener('blur', () => {
+        this.pages[pageIdx][elemIdx].text = tag.textContent;
+        this.renderThumbnails();
+      });
+      tag.addEventListener('focus', () => {
+        this.activePage = pageIdx;
+        const sel = document.getElementById('blockType');
+        if (sel) sel.value = el.type;
+      });
+      tag.addEventListener('keydown', e => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+          e.preventDefault();
+          this.pages[pageIdx][elemIdx].text = tag.textContent;
+          this.pages[pageIdx].splice(elemIdx + 1, 0, { type: 'p', text: '' });
+          this.render();
+          // Focus new element
+          setTimeout(() => {
+            const newEl = document.querySelector(`[data-page-index="${pageIdx}"] [data-elem-index="${elemIdx + 1}"] [contenteditable]`);
+            if (newEl) newEl.focus();
+          }, 50);
+        }
+      });
+      wrapper.appendChild(tag);
+    }
+
+    // Right-click
+    wrapper.addEventListener('contextmenu', e => {
+      e.preventDefault();
+      this.contextTarget = { pageIdx, elemIdx };
+      this.showContextMenu(e.clientX, e.clientY);
+    });
+
+    return wrapper;
+  }
+
+  renderThumbnails() {
+    const list = document.getElementById('pageList');
+    list.innerHTML = '';
+    this.pages.forEach((page, i) => {
+      const thumb = document.createElement('div');
+      thumb.className = `page-thumb${i === this.activePage ? ' active' : ''}`;
+      thumb.onclick = () => this.switchPage(i);
+
+      const inner = document.createElement('div');
+      inner.className = 'page-thumb-inner';
+      page.forEach(el => {
+        if (el.type === 'gif' || el.type === 'image') {
+          const img = document.createElement('img');
+          img.src = el.src;
+          img.style.maxHeight = '25px';
+          inner.appendChild(img);
+        } else if (el.type === 'hr') {
+          inner.appendChild(document.createElement('hr'));
+        } else {
+          const t = document.createElement(el.type === 'p' ? 'p' : el.type);
+          t.textContent = (el.text || '').substring(0, 60);
+          inner.appendChild(t);
+        }
+      });
+      thumb.appendChild(inner);
+
+      const label = document.createElement('span');
+      label.className = 'page-thumb-label';
+      label.textContent = i + 1;
+      thumb.appendChild(label);
+
+      if (this.pages.length > 1) {
+        const del = document.createElement('button');
+        del.className = 'delete-page';
+        del.textContent = '×';
+        del.onclick = e => { e.stopPropagation(); this.deletePage(i); };
+        thumb.appendChild(del);
+      }
+
+      list.appendChild(thumb);
+    });
+  }
+
+  saveCurrent() {
+    document.querySelectorAll('.page-content').forEach(pc => {
+      const pi = parseInt(pc.dataset.pageIndex);
+      pc.querySelectorAll('[data-elem-index]').forEach(wrapper => {
+        const ei = parseInt(wrapper.dataset.elemIndex);
+        if (this.pages[pi] && this.pages[pi][ei]) {
+          const editable = wrapper.querySelector('[contenteditable]');
+          if (editable && this.pages[pi][ei].text !== undefined) {
+            this.pages[pi][ei].text = editable.textContent;
+          }
+          const cap = wrapper.querySelector('figcaption');
+          if (cap && this.pages[pi][ei].caption !== undefined) {
+            this.pages[pi][ei].caption = cap.textContent;
+          }
+        }
+      });
+    });
+  }
+
+  // ── Block Type ──
+  setBlockType(type) {
+    const sel = window.getSelection();
+    if (!sel.rangeCount) return;
+    const node = sel.anchorNode?.parentElement?.closest('[data-elem-index]');
+    if (!node) return;
+    const pc = node.closest('.page-content');
+    if (!pc) return;
+    const pi = parseInt(pc.dataset.pageIndex);
+    const ei = parseInt(node.dataset.elemIndex);
+    if (this.pages[pi] && this.pages[pi][ei] && this.pages[pi][ei].text !== undefined) {
+      this.pages[pi][ei].type = type;
+      this.render();
+    }
+  }
+
+  // ── GIF ──
+  addGifToPage() {
+    document.getElementById('gifModal').classList.add('active');
+    document.getElementById('gifCaption').value = '';
+  }
+
+  handleGIFFile(file) {
+    if (!file) return;
+    const caption = document.getElementById('gifCaption').value;
+    this.insertGifFile(file, caption);
+    this.closeModal('gifModal');
+  }
+
+  insertGifFile(file, caption) {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const src = reader.result;
+      this.pages[this.activePage].push({
+        type: 'gif',
+        src: src,
+        alt: file.name,
+        caption: caption || ''
+      });
+      this.render();
+      this.toast('GIF inserted!', 'success');
+    };
+    reader.readAsDataURL(file);
+  }
+
+  // ── Separator ──
+  addSeparator() {
+    this.saveCurrent();
+    this.pages[this.activePage].push({ type: 'hr' });
+    this.render();
+  }
+
+  // ── Context Menu ──
+  setupContextMenu() {
+    document.addEventListener('click', () => {
+      document.getElementById('contextMenu').classList.remove('active');
+    });
+  }
+
+  showContextMenu(x, y) {
+    const menu = document.getElementById('contextMenu');
+    menu.style.left = x + 'px';
+    menu.style.top = y + 'px';
+    menu.classList.add('active');
+  }
+
+  contextAction(action) {
+    document.getElementById('contextMenu').classList.remove('active');
+    if (!this.contextTarget) return;
+    const { pageIdx, elemIdx } = this.contextTarget;
+
+    switch(action) {
+      case 'addTextAbove':
+        this.pages[pageIdx].splice(elemIdx, 0, { type: 'p', text: '' });
+        break;
+      case 'addTextBelow':
+        this.pages[pageIdx].splice(elemIdx + 1, 0, { type: 'p', text: '' });
+        break;
+      case 'addGif':
+        this.activePage = pageIdx;
+        this.addGifToPage();
+        return;
+      case 'addSeparator':
+        this.pages[pageIdx].splice(elemIdx + 1, 0, { type: 'hr' });
+        break;
+      case 'delete':
+        if (this.pages[pageIdx].length > 1) {
+          this.pages[pageIdx].splice(elemIdx, 1);
+        }
+        break;
+    }
+    this.render();
+  }
+
+  // ── Drag & Drop ──
+  setupDragDrop() {
+    const body = document.body;
+    ['dragenter','dragover'].forEach(ev => {
+      body.addEventListener(ev, e => e.preventDefault());
+    });
+    body.addEventListener('drop', e => {
+      e.preventDefault();
+      const file = e.dataTransfer.files[0];
+      if (!file) return;
+      if (file.type === 'image/gif') {
+        this.insertGifFile(file, '');
+      } else if (file.type === 'application/pdf') {
+        this.processPDF(file);
+      } else if (file.name.endsWith('.mpdf')) {
+        this.processMPDF(file);
+      }
+    });
+
+    // File drop zones in modals
+    ['pdfDrop', 'mpdfDrop', 'gifDrop'].forEach(id => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.addEventListener('dragover', e => { e.preventDefault(); el.classList.add('drag-over'); });
+      el.addEventListener('dragleave', () => el.classList.remove('drag-over'));
+      el.addEventListener('drop', e => {
+        e.preventDefault();
+        el.classList.remove('drag-over');
+        const file = e.dataTransfer.files[0];
+        if (id === 'pdfDrop' && file) this.handlePDFFile(file);
+        if (id === 'mpdfDrop' && file) this.handleMPDFFile(file);
+        if (id === 'gifDrop' && file) this.handleGIFFile(file);
+      });
+    });
+  }
+
+  // ── Keyboard ──
+  setupKeyboard() {
+    document.addEventListener('keydown', e => {
+      if (e.ctrlKey && e.key === 's') {
+        e.preventDefault();
+        this.exportMPDF();
+      }
+      if (e.ctrlKey && e.key === 'o') {
+        e.preventDefault();
+        this.openFile();
+      }
+    });
+  }
+
+  // ── Zoom ──
+  zoomIn() { this.zoom = Math.min(2, this.zoom + 0.1); this.applyZoom(); }
+  zoomOut() { this.zoom = Math.max(0.3, this.zoom - 0.1); this.applyZoom(); }
+  applyZoom() {
+    document.getElementById('zoomLabel').textContent = Math.round(this.zoom * 100) + '%';
+    document.querySelectorAll('.page').forEach(p => {
+      p.style.transform = `scale(${this.zoom})`;
+      p.style.marginBottom = `${(this.zoom - 1) * 1123 + 24}px`;
+    });
+  }
+
+  // ── New Document ──
+  newDocument() {
+    this.pages = [];
+    this.activePage = 0;
+    this.title = 'Untitled Document';
+    this.author = '';
+    this.addPage();
+    this.toast('New document created');
+  }
+
+  // ── Open MPDF ──
+  openFile() {
+    document.getElementById('openModal').classList.add('active');
+  }
+
+  handleMPDFFile(file) {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      this.processMPDF_content(reader.result);
+      this.closeModal('openModal');
+    };
+    reader.readAsText(file);
+  }
+
+  processMPDF(file) {
+    const reader = new FileReader();
+    reader.onload = () => this.processMPDF_content(reader.result);
+    reader.readAsText(file);
+  }
+
+  processMPDF_content(html) {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(html, 'text/html');
+
+    // Extract metadata
+    const titleMeta = doc.querySelector('meta[name="mpdf:title"]');
+    if (titleMeta) this.title = titleMeta.content;
+    const authorMeta = doc.querySelector('meta[name="mpdf:author"]');
+    if (authorMeta) this.author = authorMeta.content;
+
+    // Extract pages
+    const sections = doc.querySelectorAll('.mpdf-page');
+    if (sections.length === 0) {
+      this.toast('Invalid MPDF file');
+      return;
+    }
+
+    this.pages = [];
+    sections.forEach(section => {
+      const page = [];
+      section.childNodes.forEach(node => {
+        if (node.nodeType !== 1) return;
+        const tag = node.tagName.toLowerCase();
+        if (tag === 'h1' || tag === 'h2' || tag === 'h3') {
+          page.push({ type: tag, text: node.textContent });
+        } else if (tag === 'p') {
+          page.push({ type: 'p', text: node.textContent });
+        } else if (tag === 'figure') {
+          const img = node.querySelector('img');
+          const cap = node.querySelector('figcaption');
+          if (img) {
+            page.push({
+              type: node.classList.contains('mpdf-gif') ? 'gif' : 'image',
+              src: img.src,
+              alt: img.alt || '',
+              caption: cap ? cap.textContent : ''
+            });
+          }
+        } else if (tag === 'hr') {
+          page.push({ type: 'hr' });
+        }
+      });
+      if (page.length > 0) this.pages.push(page);
+    });
+
+    this.activePage = 0;
+    this.render();
+    this.toast('Document loaded!', 'success');
+  }
+
+  // ── Import PDF ──
+  importPDF() {
+    document.getElementById('importModal').classList.add('active');
+  }
+
+  async handlePDFFile(file) {
+    if (!file) return;
+    const progress = document.getElementById('importProgress');
+    const status = document.getElementById('importStatus');
+    progress.style.display = 'block';
+    status.textContent = 'Loading PDF...';
+
+    try {
+      const arrayBuffer = await file.arrayBuffer();
+      const pdfjsLib = await import('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.0.379/pdf.min.mjs');
+      pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.0.379/pdf.worker.min.mjs';
+
+      const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+      const numPages = pdf.numPages;
+
+      this.pages = [];
+
+      for (let i = 1; i <= numPages; i++) {
+        status.textContent = `Converting page ${i}/${numPages}...`;
+        const pdfPage = await pdf.getPage(i);
+        const viewport = pdfPage.getViewport({ scale: 2 });
+
+        const canvas = document.createElement('canvas');
+        canvas.width = viewport.width;
+        canvas.height = viewport.height;
+        const ctx = canvas.getContext('2d');
+
+        await pdfPage.render({ canvasContext: ctx, viewport }).promise;
+
+        const dataUrl = canvas.toDataURL('image/png', 0.92);
+
+        this.pages.push([
+          { type: 'image', src: dataUrl, alt: `Page ${i}`, caption: '' }
+        ]);
+      }
+
+      this.activePage = 0;
+      this.render();
+      this.closeModal('importModal');
+      this.toast(`Imported ${numPages} pages from PDF!`, 'success');
+    } catch (err) {
+      status.textContent = `Error: ${err.message}`;
+      console.error(err);
+    }
+  }
+
+  // ── Export ──
+  exportMPDF() {
+    this.saveCurrent();
+    const today = new Date().toISOString().slice(0, 10);
+
+    let meta = `<meta charset="utf-8">\n`;
+    meta += `<meta name="mpdf:title" content="${esc(this.title)}">\n`;
+    if (this.author) meta += `<meta name="mpdf:author" content="${esc(this.author)}">\n`;
+    meta += `<meta name="mpdf:created" content="${today}">\n`;
+    meta += `<meta name="mpdf:generator" content="mpdf-editor/1.0">\n`;
+    meta += `<title>${esc(this.title)}</title>\n`;
+    meta += `<style>${MPDF_CSS}</style>`;
+
+    let body = '';
+    this.pages.forEach((page, pi) => {
+      let content = '';
+      page.forEach(el => {
+        if (el.type === 'h1' || el.type === 'h2' || el.type === 'h3') {
+          content += `<${el.type} class="mpdf-heading">${esc(el.text || '')}</${el.type}>\n`;
+        } else if (el.type === 'p') {
+          content += `<p class="mpdf-text">${esc(el.text || '')}</p>\n`;
+        } else if (el.type === 'gif') {
+          const cap = el.caption ? `\n<figcaption>${esc(el.caption)}</figcaption>` : '';
+          content += `<figure class="mpdf-gif">\n<img src="${el.src}" alt="${esc(el.alt || 'Animated GIF')}">${cap}\n</figure>\n`;
+        } else if (el.type === 'image') {
+          const cap = el.caption ? `\n<figcaption>${esc(el.caption)}</figcaption>` : '';
+          content += `<figure class="mpdf-image">\n<img src="${el.src}" alt="${esc(el.alt || 'Image')}">${cap}\n</figure>\n`;
+        } else if (el.type === 'hr') {
+          content += `<hr class="mpdf-separator">\n`;
+        }
+      });
+      body += `<section class="mpdf-page" data-page="${pi + 1}">\n${content}</section>\n`;
+    });
+
+    const mpdf = `<!DOCTYPE mpdf>\n<html data-mpdf-version="1.0">\n<head>\n${meta}\n</head>\n<body>\n<article class="mpdf-document">\n${body}</article>\n</body>\n</html>`;
+
+    // Download
+    const blob = new Blob([mpdf], { type: 'text/html;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = (this.title || 'document').replace(/[^a-zA-Z0-9_-]/g, '_') + '.mpdf';
+    a.click();
+    URL.revokeObjectURL(url);
+
+    this.toast('Exported as .mpdf!', 'success');
+  }
+
+  // ── Modal ──
+  closeModal(id) {
+    document.getElementById(id).classList.remove('active');
+    document.getElementById('importProgress').style.display = 'none';
+  }
+
+  // ── Toast ──
+  toast(msg, type = '') {
+    const el = document.getElementById('toast');
+    el.textContent = msg;
+    el.className = 'toast show' + (type ? ' ' + type : '');
+    clearTimeout(this._toastTimer);
+    this._toastTimer = setTimeout(() => el.classList.remove('show'), 2500);
+  }
+}
+
+// ── Init ──
+window.editor = new MPDFEditor();
+
+</script>
+</body>
+</html>

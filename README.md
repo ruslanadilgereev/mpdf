@@ -8,7 +8,7 @@ Send someone an `.mpdf` file, they open it in their browser — boom, a paper wi
 
 <div align="center">
 
-### [Live Demo](https://ruslanadilgereev.github.io/mpdf/)
+### [Live Editor](https://ruslanadilgereev.github.io/mpdf/editor/) · [Live Demo](https://ruslanadilgereev.github.io/mpdf/)
 
 <br>
 
@@ -140,6 +140,18 @@ page.add_gif("animation.gif", caption="Figure 1")
 doc.save("output.mpdf")
 ```
 
+## Web Editor
+
+Full-featured MPDF editor right in your browser — no install needed:
+
+**[Open Editor](https://ruslanadilgereev.github.io/mpdf/editor/)**
+
+- Create documents visually (headings, paragraphs, GIFs)
+- Import PDF files — each page becomes an MPDF page
+- Drag & drop GIFs directly onto the document
+- Export as .mpdf with one click
+- Keyboard shortcuts (Ctrl+S to export, Ctrl+O to open)
+
 ## Project Structure
 
 ```
@@ -147,6 +159,7 @@ mpdf-spec.md          Format specification v1.0
 mpdf-create.py        Standalone creation tool
 mpdf-validate.py      Standalone validator
 src/mpdf/             Python library (pip install mpdf)
+docs/editor/          Web-based MPDF editor
 examples/             Example documents (minimal, academic, tutorial)
 setup/                Platform installers (Windows, macOS, Linux)
 test.mpdf             Sample document — open in your browser
