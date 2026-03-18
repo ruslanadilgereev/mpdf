@@ -1,0 +1,21 @@
+Windows Registry Editor Version 5.00
+
+; MPDF File Type Registration
+; Associates .mpdf files with the browser as HTML content
+; Double-click this file to register (one-time setup)
+
+[HKEY_CURRENT_USER\Software\Classes\.mpdf]
+@="mpdffile"
+"Content Type"="text/html"
+"PerceivedType"="text"
+
+[HKEY_CURRENT_USER\Software\Classes\mpdffile]
+@="MPDF Document"
+
+[HKEY_CURRENT_USER\Software\Classes\mpdffile\shell]
+
+[HKEY_CURRENT_USER\Software\Classes\mpdffile\shell\open]
+@="Open in Browser"
+
+[HKEY_CURRENT_USER\Software\Classes\mpdffile\shell\open\command]
+@="\"C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe\" \"%1\""
