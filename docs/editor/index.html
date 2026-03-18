@@ -75,8 +75,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .drop-zone svg{width:32px;height:32px;fill:var(--accent);margin-bottom:8px;display:block;margin:0 auto 8px}
 
 /* ── Element Wrapper (draggable) ── */
-.elem-wrap{position:relative;transition:opacity 0.15s}
-.elem-wrap.dragging{opacity:0.3}
+.elem-wrap{position:relative;transition:opacity 0.15s,outline 0.15s;border-radius:4px;outline:2px solid transparent}
+.elem-wrap:hover{outline:2px solid rgba(79,195,247,0.2)}
+.elem-wrap.dragging{opacity:0.25;outline:2px dashed var(--accent)}
 .elem-wrap .drag-handle{position:absolute;left:-36px;top:50%;transform:translateY(-50%);width:24px;height:24px;cursor:grab;opacity:0;transition:opacity 0.15s;display:flex;align-items:center;justify-content:center;border-radius:4px;color:#999}
 .elem-wrap:hover .drag-handle{opacity:1}
 .drag-handle:hover{background:rgba(79,195,247,0.15);color:var(--accent)}
@@ -85,8 +86,13 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .elem-wrap:hover .move-buttons{opacity:1}
 .move-btn{width:22px;height:22px;border:none;background:rgba(79,195,247,0.1);color:#999;border-radius:4px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:14px;line-height:1}
 .move-btn:hover{background:var(--accent);color:var(--bg)}
-.drop-indicator{height:3px;background:var(--accent);border-radius:2px;margin:2px 0;display:none;transition:all 0.1s}
-.drop-indicator.active{display:block;box-shadow:0 0 8px rgba(79,195,247,0.5)}
+.drop-indicator{height:4px;background:var(--accent);border-radius:2px;margin:4px 0;display:none;transition:all 0.1s}
+.drop-indicator.active{display:block;box-shadow:0 0 12px rgba(79,195,247,0.6)}
+
+/* ── Page thumbnails drag ── */
+.page-thumb.dragging{opacity:0.3;border-color:var(--accent)}
+.page-thumb-drop{height:4px;background:var(--accent);border-radius:2px;margin:4px 0;display:none}
+.page-thumb-drop.active{display:block;box-shadow:0 0 8px rgba(79,195,247,0.5)}
 
 /* ── Element Toolbar ── */
 .element-toolbar{position:absolute;left:-44px;top:0;display:flex;flex-direction:column;gap:4px;opacity:0;transition:opacity 0.15s}
@@ -383,22 +389,29 @@ class MPDFEditor {
     wrapper.dataset.elemIndex = elemIdx;
     wrapper.dataset.pageIndex = pageIdx;
 
-    // Drag handle (left side)
-    const handle = document.createElement('div');
-    handle.className = 'drag-handle';
-    handle.innerHTML = '&#x2630;';
-    handle.draggable = true;
-    handle.addEventListener('dragstart', e => {
+    // Make the whole wrapper draggable
+    wrapper.draggable = true;
+    wrapper.addEventListener('dragstart', e => {
+      // Don't drag if user is editing text
+      if (e.target.isContentEditable && e.target !== wrapper) {
+        e.preventDefault();
+        return;
+      }
       e.dataTransfer.setData('text/plain', JSON.stringify({ pageIdx, elemIdx }));
       e.dataTransfer.effectAllowed = 'move';
       wrapper.classList.add('dragging');
       this._dragging = { pageIdx, elemIdx };
     });
-    handle.addEventListener('dragend', () => {
+    wrapper.addEventListener('dragend', () => {
       wrapper.classList.remove('dragging');
       this._dragging = null;
       document.querySelectorAll('.drop-indicator').forEach(d => d.classList.remove('active'));
     });
+
+    // Drag handle (left side) — visual indicator
+    const handle = document.createElement('div');
+    handle.className = 'drag-handle';
+    handle.innerHTML = '&#x2630;';
     wrapper.appendChild(handle);
 
     // Move buttons (right side)
@@ -470,6 +483,7 @@ class MPDFEditor {
       img.style.border = '1px solid #ddd';
       img.style.borderRadius = '3px';
       img.draggable = false;
+      img.style.cursor = 'grab';
       figure.appendChild(img);
       if (el.caption !== undefined) {
         const cap = document.createElement('figcaption');
@@ -549,9 +563,48 @@ class MPDFEditor {
     const list = document.getElementById('pageList');
     list.innerHTML = '';
     this.pages.forEach((page, i) => {
+      // Drop indicator between pages
+      const pageDrop = document.createElement('div');
+      pageDrop.className = 'page-thumb-drop';
+      pageDrop.dataset.dropPageIdx = i;
+      pageDrop.addEventListener('dragover', e => { e.preventDefault(); pageDrop.classList.add('active'); });
+      pageDrop.addEventListener('dragleave', () => pageDrop.classList.remove('active'));
+      pageDrop.addEventListener('drop', e => {
+        e.preventDefault();
+        pageDrop.classList.remove('active');
+        if (this._draggingPage === undefined) return;
+        this.reorderPage(this._draggingPage, i);
+      });
+      list.appendChild(pageDrop);
+
       const thumb = document.createElement('div');
       thumb.className = `page-thumb${i === this.activePage ? ' active' : ''}`;
       thumb.onclick = () => this.switchPage(i);
+      thumb.draggable = true;
+      thumb.addEventListener('dragstart', e => {
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', `page:${i}`);
+        this._draggingPage = i;
+        thumb.classList.add('dragging');
+      });
+      thumb.addEventListener('dragend', () => {
+        thumb.classList.remove('dragging');
+        this._draggingPage = undefined;
+        document.querySelectorAll('.page-thumb-drop').forEach(d => d.classList.remove('active'));
+      });
+      thumb.addEventListener('dragover', e => {
+        e.preventDefault();
+        if (this._draggingPage === undefined) return;
+        document.querySelectorAll('.page-thumb-drop').forEach(d => d.classList.remove('active'));
+        const rect = thumb.getBoundingClientRect();
+        const mid = rect.top + rect.height / 2;
+        if (e.clientY < mid) {
+          pageDrop.classList.add('active');
+        } else {
+          const next = thumb.nextElementSibling;
+          if (next) next.classList.add('active');
+        }
+      });
 
       const inner = document.createElement('div');
       inner.className = 'page-thumb-inner';
@@ -560,6 +613,7 @@ class MPDFEditor {
           const img = document.createElement('img');
           img.src = el.src;
           img.style.maxHeight = '25px';
+          img.draggable = false;
           inner.appendChild(img);
         } else if (el.type === 'hr') {
           inner.appendChild(document.createElement('hr'));
@@ -579,13 +633,38 @@ class MPDFEditor {
       if (this.pages.length > 1) {
         const del = document.createElement('button');
         del.className = 'delete-page';
-        del.textContent = '×';
+        del.textContent = '\u00d7';
         del.onclick = e => { e.stopPropagation(); this.deletePage(i); };
         thumb.appendChild(del);
       }
 
       list.appendChild(thumb);
     });
+
+    // Final drop zone at end
+    const lastDrop = document.createElement('div');
+    lastDrop.className = 'page-thumb-drop';
+    lastDrop.dataset.dropPageIdx = this.pages.length;
+    lastDrop.addEventListener('dragover', e => { e.preventDefault(); lastDrop.classList.add('active'); });
+    lastDrop.addEventListener('dragleave', () => lastDrop.classList.remove('active'));
+    lastDrop.addEventListener('drop', e => {
+      e.preventDefault();
+      lastDrop.classList.remove('active');
+      if (this._draggingPage === undefined) return;
+      this.reorderPage(this._draggingPage, this.pages.length);
+    });
+    list.appendChild(lastDrop);
+  }
+
+  reorderPage(fromIdx, toIdx) {
+    if (fromIdx === toIdx || fromIdx === toIdx - 1) return;
+    const [page] = this.pages.splice(fromIdx, 1);
+    if (fromIdx < toIdx) toIdx--;
+    this.pages.splice(toIdx, 0, page);
+    this.activePage = toIdx;
+    this._draggingPage = undefined;
+    this.render();
+    this.toast('Page moved', 'success');
   }
 
   saveCurrent() {
