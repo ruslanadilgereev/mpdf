@@ -86,8 +86,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .elem-wrap:hover .move-buttons{opacity:1}
 .move-btn{width:22px;height:22px;border:none;background:rgba(79,195,247,0.1);color:#999;border-radius:4px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:14px;line-height:1}
 .move-btn:hover{background:var(--accent);color:var(--bg)}
-.drop-indicator{height:4px;background:var(--accent);border-radius:2px;margin:4px 0;display:none;transition:all 0.1s}
-.drop-indicator.active{display:block;box-shadow:0 0 12px rgba(79,195,247,0.6)}
+.drop-indicator{height:0;border-radius:2px;margin:0;position:relative;transition:all 0.15s}
+.drop-indicator::after{content:'';position:absolute;left:0;right:0;top:-12px;bottom:-12px;z-index:5}
+.drop-indicator.active{height:4px;margin:6px 0;background:var(--accent);box-shadow:0 0 12px rgba(79,195,247,0.6)}
+.drop-indicator.active::before{content:'+ Drop here';position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);font-size:11px;color:var(--accent);background:var(--surface);padding:0 8px;white-space:nowrap}
 
 /* ── Page thumbnails drag ── */
 .page-thumb.dragging{opacity:0.3;border-color:var(--accent)}
@@ -378,11 +380,52 @@ class MPDFEditor {
   }
 
   createElementDOM(el, pageIdx, elemIdx) {
-    // Drop indicator above this element
+    // Drop indicator above this element (accepts both reorder + GIF file drops)
     const dropIndicator = document.createElement('div');
     dropIndicator.className = 'drop-indicator';
     dropIndicator.dataset.dropIndex = elemIdx;
     dropIndicator.dataset.dropPage = pageIdx;
+    dropIndicator.addEventListener('dragover', e => {
+      e.preventDefault();
+      e.stopPropagation();
+      document.querySelectorAll('.drop-indicator').forEach(d => d.classList.remove('active'));
+      dropIndicator.classList.add('active');
+    });
+    dropIndicator.addEventListener('dragleave', () => dropIndicator.classList.remove('active'));
+    dropIndicator.addEventListener('drop', e => {
+      e.preventDefault();
+      e.stopPropagation();
+      dropIndicator.classList.remove('active');
+      // Check if it's a file drop (GIF from outside)
+      const file = e.dataTransfer.files?.[0];
+      if (file && file.type === 'image/gif') {
+        const reader = new FileReader();
+        reader.onload = () => {
+          this.saveCurrent();
+          this.pages[pageIdx].splice(elemIdx, 0, {
+            type: 'gif', src: reader.result, alt: file.name, caption: ''
+          });
+          this.render();
+          this.toast('GIF inserted!', 'success');
+        };
+        reader.readAsDataURL(file);
+        return;
+      }
+      // Internal element reorder
+      if (this._dragging) {
+        const from = this._dragging;
+        if (from.pageIdx === pageIdx) {
+          this.saveCurrent();
+          const page = this.pages[pageIdx];
+          const [item] = page.splice(from.elemIdx, 1);
+          const toIdx = from.elemIdx < elemIdx ? elemIdx - 1 : elemIdx;
+          page.splice(toIdx, 0, item);
+          this.render();
+          this.toast('Element moved', 'success');
+        }
+        this._dragging = null;
+      }
+    });
 
     const wrapper = document.createElement('div');
     wrapper.className = 'elem-wrap';
@@ -951,28 +994,130 @@ class MPDFEditor {
       this.pages = [];
 
       for (let i = 1; i <= numPages; i++) {
-        status.textContent = `Converting page ${i}/${numPages}...`;
+        status.textContent = `Extracting text from page ${i}/${numPages}...`;
         const pdfPage = await pdf.getPage(i);
-        const viewport = pdfPage.getViewport({ scale: 2 });
+        const viewport = pdfPage.getViewport({ scale: 1 });
+        const pageHeight = viewport.height;
 
-        const canvas = document.createElement('canvas');
-        canvas.width = viewport.width;
-        canvas.height = viewport.height;
-        const ctx = canvas.getContext('2d');
+        // Extract text content with positions and font info
+        const textContent = await pdfPage.getTextContent();
+        const items = textContent.items.filter(it => it.str && it.str.trim());
 
-        await pdfPage.render({ canvasContext: ctx, viewport }).promise;
+        if (items.length === 0) {
+          // Fallback: page has no extractable text (scanned PDF) → render as image
+          status.textContent = `Rendering page ${i}/${numPages} as image...`;
+          const cv = document.createElement('canvas');
+          const vp2 = pdfPage.getViewport({ scale: 2 });
+          cv.width = vp2.width; cv.height = vp2.height;
+          await pdfPage.render({ canvasContext: cv.getContext('2d'), viewport: vp2 }).promise;
+          this.pages.push([
+            { type: 'image', src: cv.toDataURL('image/png', 0.92), alt: `Page ${i}`, caption: '' }
+          ]);
+          continue;
+        }
 
-        const dataUrl = canvas.toDataURL('image/png', 0.92);
+        // Group text items into lines (same Y position ± threshold)
+        const lines = [];
+        const sorted = items.slice().sort((a, b) => {
+          const ay = pageHeight - a.transform[5];
+          const by = pageHeight - b.transform[5];
+          return ay - by || a.transform[4] - b.transform[4];
+        });
 
-        this.pages.push([
-          { type: 'image', src: dataUrl, alt: `Page ${i}`, caption: '' }
-        ]);
+        let currentLine = null;
+        for (const item of sorted) {
+          const y = pageHeight - item.transform[5];
+          const fontSize = Math.abs(item.transform[0]) || 12;
+          const lineThreshold = fontSize * 0.5;
+
+          if (!currentLine || Math.abs(y - currentLine.y) > lineThreshold) {
+            currentLine = { y, fontSize, items: [item] };
+            lines.push(currentLine);
+          } else {
+            currentLine.items.push(item);
+            currentLine.fontSize = Math.max(currentLine.fontSize, fontSize);
+          }
+        }
+
+        // Build line texts
+        for (const line of lines) {
+          line.items.sort((a, b) => a.transform[4] - b.transform[4]);
+          line.text = line.items.map(it => it.str).join(' ').replace(/\s+/g, ' ').trim();
+        }
+
+        // Determine the most common font size (body text)
+        const fontSizes = lines.map(l => Math.round(l.fontSize));
+        const fontFreq = {};
+        fontSizes.forEach(s => fontFreq[s] = (fontFreq[s] || 0) + 1);
+        const bodyFontSize = parseInt(Object.entries(fontFreq).sort((a, b) => b[1] - a[1])[0][0]);
+
+        // Group consecutive lines with same style into paragraphs
+        const pageElements = [];
+        let currentParagraph = null;
+
+        for (const line of lines) {
+          if (!line.text) continue;
+          const fs = Math.round(line.fontSize);
+          const isHeading = fs > bodyFontSize * 1.15;
+          const headingLevel = fs > bodyFontSize * 1.6 ? 'h1' : fs > bodyFontSize * 1.3 ? 'h2' : 'h3';
+
+          if (isHeading) {
+            // Flush current paragraph
+            if (currentParagraph) {
+              pageElements.push(currentParagraph);
+              currentParagraph = null;
+            }
+            // Check if we can merge with previous heading of same level
+            const prev = pageElements[pageElements.length - 1];
+            if (prev && prev.type === headingLevel) {
+              prev.text += ' ' + line.text;
+            } else {
+              pageElements.push({ type: headingLevel, text: line.text });
+            }
+          } else {
+            // Body text - merge into paragraph
+            if (!currentParagraph) {
+              currentParagraph = { type: 'p', text: line.text };
+            } else {
+              // Check if this is a new paragraph (large gap from previous line)
+              const prevLine = lines[lines.indexOf(line) - 1];
+              const gap = prevLine ? (line.y - prevLine.y) : 0;
+              const normalLineHeight = bodyFontSize * 1.5;
+
+              if (gap > normalLineHeight * 1.8) {
+                // New paragraph
+                pageElements.push(currentParagraph);
+                currentParagraph = { type: 'p', text: line.text };
+              } else {
+                // Continue paragraph - check if previous line ended with hyphen
+                if (currentParagraph.text.endsWith('-')) {
+                  currentParagraph.text = currentParagraph.text.slice(0, -1) + line.text;
+                } else {
+                  currentParagraph.text += ' ' + line.text;
+                }
+              }
+            }
+          }
+        }
+        if (currentParagraph) pageElements.push(currentParagraph);
+
+        if (pageElements.length > 0) {
+          this.pages.push(pageElements);
+        }
       }
+
+      if (this.pages.length === 0) {
+        this.pages.push([{ type: 'p', text: 'No content could be extracted from this PDF.' }]);
+      }
+
+      // Try to detect title from first heading
+      const firstH1 = this.pages[0]?.find(e => e.type === 'h1');
+      if (firstH1) this.title = firstH1.text;
 
       this.activePage = 0;
       this.render();
       this.closeModal('importModal');
-      this.toast(`Imported ${numPages} pages from PDF!`, 'success');
+      this.toast(`Imported ${this.pages.length} pages — ${this.pages.reduce((s,p) => s + p.length, 0)} elements extracted!`, 'success');
     } catch (err) {
       status.textContent = `Error: ${err.message}`;
       console.error(err);
