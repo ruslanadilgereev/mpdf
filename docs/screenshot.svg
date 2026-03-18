@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="700" height="520" viewBox="0 0 700 520">
+  <defs>
+    <filter id="shadow" x="-2%" y="-2%" width="104%" height="104%">
+      <feDropShadow dx="0" dy="2" stdDeviation="4" flood-opacity="0.12"/>
+    </filter>
+  </defs>
+  <rect width="700" height="520" fill="#f0f0f0" rx="4"/>
+  <rect x="50" y="20" width="600" height="480" fill="white" rx="2" filter="url(#shadow)"/>
+  <text x="350" y="70" text-anchor="middle" font-family="Georgia,serif" font-size="20" font-weight="bold" fill="#1a1a1a">MPDF: Media PDF</text>
+  <text x="350" y="95" text-anchor="middle" font-family="Georgia,serif" font-size="20" font-weight="bold" fill="#1a1a1a">Documents with Animated GIFs</text>
+  <text x="120" y="135" font-family="Georgia,serif" font-size="16" font-weight="bold" fill="#1a1a1a">Abstract</text>
+  <text x="120" y="160" font-family="Georgia,serif" font-size="11" fill="#1a1a1a">This document demonstrates the MPDF file format -- an open standard</text>
+  <text x="120" y="176" font-family="Georgia,serif" font-size="11" fill="#1a1a1a">for creating portable documents that support embedded animated GIF</text>
+  <text x="120" y="192" font-family="Georgia,serif" font-size="11" fill="#1a1a1a">images. Unlike traditional PDF files, MPDF enables authors to include</text>
+  <text x="120" y="208" font-family="Georgia,serif" font-size="11" fill="#1a1a1a">animations directly within their documents.</text>
+  <text x="120" y="240" font-family="Georgia,serif" font-size="16" font-weight="bold" fill="#1a1a1a">1. Introduction</text>
+  <text x="120" y="265" font-family="Georgia,serif" font-size="11" fill="#1a1a1a">The Portable Document Format (PDF) has been the standard for document</text>
+  <text x="120" y="281" font-family="Georgia,serif" font-size="11" fill="#1a1a1a">exchange for over three decades. MPDF extends this with GIF support.</text>
+  <rect x="250" y="300" width="200" height="150" fill="#fafafa" stroke="#ddd" stroke-width="1" rx="3"/>
+  <rect x="280" y="335" width="140" height="20" fill="#2962FF" rx="2" opacity="0.9"/>
+  <rect x="280" y="360" width="140" height="20" fill="#00C853" rx="2" opacity="0.7"/>
+  <rect x="280" y="385" width="140" height="20" fill="#FF3D00" rx="2" opacity="0.5"/>
+  <text x="350" y="320" text-anchor="middle" font-family="Georgia,serif" font-size="9" fill="#999">Animated GIF</text>
+  <text x="350" y="468" text-anchor="middle" font-family="Georgia,serif" font-size="10" fill="#666" font-style="italic">Figure 1: An animated gradient bar demonstrating GIF support in MPDF</text>
+  <rect x="560" y="486" width="70" height="18" fill="#2962FF" rx="9"/>
+  <text x="595" y="498" text-anchor="middle" font-family="Arial,sans-serif" font-size="9" fill="white" font-weight="bold">.mpdf</text>
+</svg>
