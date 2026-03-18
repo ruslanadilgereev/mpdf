@@ -46,27 +46,43 @@ Send someone an `.mpdf` file, they open it in their browser — boom, a paper wi
 
 ## Quick Start
 
-**Create a demo document:**
+**Install:**
 
 ```bash
-python create_demo.py
+pip install mpdf
 ```
 
-This generates `test.mpdf` — open it in your browser.
-
-**Create your own document:**
+**Create a document:**
 
 ```bash
-python mpdf-create.py --title "My Paper" --author "Your Name" -o paper.mpdf \
+mpdf create --title "My Paper" --author "Your Name" -o paper.mpdf \
     h1 "My Research Paper" \
     text "Introduction paragraph..." \
     gif figure1.gif "Figure 1: Results" \
     text "As shown in Figure 1..."
 ```
 
-**First-time setup (Windows):**
+**Validate:**
 
-Double-click `register-mpdf.reg` to associate `.mpdf` files with your browser. After that, double-click any `.mpdf` file to open it.
+```bash
+mpdf validate paper.mpdf
+```
+
+**Open in browser:**
+
+```bash
+mpdf view paper.mpdf
+```
+
+**File type setup (one-time):**
+
+| Platform | Command |
+|----------|---------|
+| Windows | Run `setup/install-windows.bat` |
+| macOS | Run `setup/install-macos.sh` |
+| Linux | Run `setup/install-linux.sh` |
+
+After setup, double-click any `.mpdf` file to open it.
 
 ## What a .mpdf file looks like
 
@@ -111,15 +127,34 @@ What makes it a standard (not just HTML):
 
 See the full [Format Specification](mpdf-spec.md).
 
+## Python Library
+
+```python
+from mpdf import MPDFDocument
+
+doc = MPDFDocument("My Paper", author="Author Name")
+page = doc.add_page()
+page.add_heading("Title", level=1)
+page.add_text("Hello world.")
+page.add_gif("animation.gif", caption="Figure 1")
+doc.save("output.mpdf")
+```
+
 ## Project Structure
 
 ```
-mpdf-spec.md        Format specification v1.0
-mpdf-create.py      Reference tool for creating .mpdf files
-create_demo.py      Generates test.mpdf with a demo animated GIF
-register-mpdf.reg   Windows file type registration (one-time setup)
-test.mpdf           Sample document — open in your browser
+mpdf-spec.md          Format specification v1.0
+mpdf-create.py        Standalone creation tool
+mpdf-validate.py      Standalone validator
+src/mpdf/             Python library (pip install mpdf)
+examples/             Example documents (minimal, academic, tutorial)
+setup/                Platform installers (Windows, macOS, Linux)
+test.mpdf             Sample document — open in your browser
 ```
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for how to get involved.
 
 ## License
 

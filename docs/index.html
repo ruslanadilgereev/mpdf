@@ -1,50 +1,153 @@
-<!DOCTYPE mpdf>
-<html data-mpdf-version="1.0">
+<!DOCTYPE html>
+<html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="mpdf:title" content="MPDF Format Demonstration">
-<meta name="mpdf:author" content="MPDF Reference Implementation">
-<meta name="mpdf:created" content="2026-03-18">
-<meta name="mpdf:generator" content="create_demo/1.0">
-<title>MPDF Format Demonstration</title>
-<style>*{margin:0;padding:0;box-sizing:border-box}
-body{background:#f0f0f0;font-family:Georgia,'Times New Roman',Times,serif;font-size:16px;line-height:1.8;color:#1a1a1a;padding:40px 20px}
-.mpdf-document{max-width:800px;margin:0 auto}
-.mpdf-page{background:#fff;padding:60px 70px;margin-bottom:30px;box-shadow:0 2px 8px rgba(0,0,0,0.12);position:relative;min-height:900px;page-break-after:always}
-.mpdf-heading{font-family:Georgia,'Times New Roman',Times,serif;margin-bottom:0.6em;line-height:1.3}
-h1.mpdf-heading{font-size:28px;text-align:center;margin-bottom:0.8em}
-h2.mpdf-heading{font-size:22px;margin-top:1.2em}
-h3.mpdf-heading{font-size:18px;margin-top:1em}
-.mpdf-text{margin-bottom:1em;text-align:justify;hyphens:auto}
-.mpdf-gif,.mpdf-image{margin:1.5em auto;text-align:center}
-.mpdf-gif img,.mpdf-image img{max-width:100%;height:auto;border:1px solid #ddd;border-radius:3px}
-.mpdf-gif figcaption,.mpdf-image figcaption{font-size:13px;color:#666;margin-top:8px;font-style:italic}
-.mpdf-separator{border:none;border-top:1px solid #ccc;margin:2em 0}
-@media(max-width:600px){.mpdf-page{padding:30px 25px}h1.mpdf-heading{font-size:22px}body{padding:10px}}
-@media print{body{background:#fff;padding:0}.mpdf-page{box-shadow:none;padding:40px 50px;margin:0}.mpdf-gif img{max-height:400px}}
-@media(prefers-color-scheme:dark){body{background:#1e1e1e}.mpdf-page{background:#2d2d2d;color:#e0e0e0;box-shadow:0 2px 8px rgba(0,0,0,0.4)}.mpdf-gif img,.mpdf-image img{border-color:#444}.mpdf-gif figcaption,.mpdf-image figcaption{color:#999}.mpdf-separator{border-color:#444}}</style>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MPDF — Media PDF</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:#1a1a1a;line-height:1.6}
+
+.hero{background:linear-gradient(135deg,#1a1a2e 0%,#16213e 50%,#0f3460 100%);color:#fff;padding:80px 20px;text-align:center}
+.hero h1{font-size:48px;font-weight:700;margin-bottom:8px}
+.hero h1 span{color:#4fc3f7}
+.hero .subtitle{font-size:20px;opacity:0.85;margin-bottom:40px}
+.hero .cta{display:inline-flex;gap:12px;flex-wrap:wrap;justify-content:center}
+.hero .cta a{padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:600;font-size:15px;transition:transform 0.1s}
+.hero .cta a:hover{transform:translateY(-1px)}
+.btn-primary{background:#4fc3f7;color:#1a1a2e}
+.btn-secondary{background:rgba(255,255,255,0.1);color:#fff;border:1px solid rgba(255,255,255,0.2)}
+
+section{max-width:900px;margin:0 auto;padding:60px 20px}
+h2{font-size:28px;margin-bottom:24px}
+h3{font-size:18px;margin-bottom:8px;margin-top:20px}
+
+.steps{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:24px;margin-top:24px}
+.step{background:#f8f9fa;border-radius:12px;padding:24px;text-align:center}
+.step .num{font-size:32px;font-weight:700;color:#4fc3f7;margin-bottom:8px}
+.step p{font-size:14px;color:#555}
+
+.preview-section{background:#f0f0f0;padding:60px 20px}
+.preview-container{max-width:900px;margin:0 auto}
+.preview-frame{background:#fff;border-radius:8px;box-shadow:0 4px 20px rgba(0,0,0,0.1);overflow:hidden}
+.preview-bar{background:#e0e0e0;padding:8px 16px;display:flex;align-items:center;gap:8px}
+.preview-dot{width:12px;height:12px;border-radius:50%;background:#ccc}
+.preview-dot:nth-child(1){background:#ff5f57}
+.preview-dot:nth-child(2){background:#ffbd2e}
+.preview-dot:nth-child(3){background:#28c940}
+.preview-url{flex:1;background:#fff;border-radius:4px;padding:4px 12px;font-size:12px;color:#888;margin-left:8px}
+.preview-content{padding:40px 50px;font-family:Georgia,serif}
+.preview-content h1{font-size:22px;text-align:center;margin-bottom:16px}
+.preview-content h2{font-size:17px;margin-top:16px;margin-bottom:8px}
+.preview-content p{font-size:13px;line-height:1.7;color:#333;margin-bottom:10px;text-align:justify}
+.preview-content .gif-placeholder{text-align:center;margin:20px 0}
+.preview-content .gif-placeholder img{border:1px solid #ddd;border-radius:3px}
+.preview-content .caption{font-size:11px;color:#666;font-style:italic;text-align:center;margin-top:6px}
+
+.format-table{width:100%;border-collapse:collapse;margin-top:16px}
+.format-table td{padding:10px 16px;border-bottom:1px solid #eee}
+.format-table td:first-child{font-family:monospace;font-size:14px;color:#4fc3f7;white-space:nowrap;width:200px}
+
+.install-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:16px;margin-top:16px}
+.install-card{background:#f8f9fa;border-radius:8px;padding:20px}
+.install-card h3{margin-top:0}
+.install-card code{display:block;background:#1a1a2e;color:#4fc3f7;padding:12px;border-radius:6px;font-size:13px;margin-top:8px;overflow-x:auto}
+
+footer{text-align:center;padding:40px 20px;color:#888;font-size:14px}
+footer a{color:#4fc3f7;text-decoration:none}
+</style>
 </head>
 <body>
-<article class="mpdf-document">
-<section class="mpdf-page" data-page="1">
-<h1 class="mpdf-heading">MPDF: Media PDF<br>Documents with Animated GIFs</h1>
-<h2 class="mpdf-heading">Abstract</h2>
-<p class="mpdf-text">This document demonstrates the MPDF file format — an open standard for creating portable documents that support embedded animated GIF images. Unlike traditional PDF files, which can only display static images, MPDF enables authors to include animations directly within their documents while maintaining the familiar paper-like reading experience.</p>
-<h2 class="mpdf-heading">1. Introduction</h2>
-<p class="mpdf-text">The Portable Document Format (PDF) has been the standard for document exchange for over three decades. However, as digital communication evolves, the need for richer media in documents becomes apparent. MPDF addresses this by extending the document paradigm with animated GIF support.</p>
-<p class="mpdf-text">Below is an animated figure demonstrating the format's capability to embed and display animated GIF images inline with text content:</p>
-<figure class="mpdf-gif">
-<img src="data:image/gif;base64,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" alt="Animated demonstration showing a moving colored gradient bar">
-<figcaption>Figure 1: An animated gradient bar demonstrating embedded GIF support in the MPDF format.</figcaption>
-</figure>
-<h2 class="mpdf-heading">2. Format Design</h2>
-<p class="mpdf-text">MPDF is designed around three core principles: zero-install viewing (any browser can open it), self-containment (all resources are embedded inline), and deterministic rendering (a standardized stylesheet ensures consistent appearance across platforms).</p>
-<p class="mpdf-text">The format is intentionally simple — a single self-contained file that can be shared via email, messaging, or any file transfer mechanism. Recipients need nothing more than a web browser to view the document, including its animated content.</p>
-<h2 class="mpdf-heading">3. Conclusion</h2>
-<p class="mpdf-text">MPDF proves that document formats can evolve to include richer media without sacrificing simplicity or portability. This very document is a valid .mpdf file — if you are reading it in a browser, you are experiencing the format firsthand.</p>
-<hr class="mpdf-separator">
-<p class="mpdf-text">MPDF v1.0 — Open Standard — 2026-03-18</p>
+
+<div class="hero">
+<h1><span>MPDF</span> — Media PDF</h1>
+<p class="subtitle">An open document format like PDF, but with animated GIFs.</p>
+<div class="cta">
+<a href="https://github.com/ruslanadilgereev/mpdf" class="btn-primary">GitHub</a>
+<a href="https://github.com/ruslanadilgereev/mpdf/blob/main/mpdf-spec.md" class="btn-secondary">Specification</a>
+</div>
+</div>
+
+<section>
+<h2>How it works</h2>
+<div class="steps">
+<div class="step">
+<div class="num">1</div>
+<h3>Create</h3>
+<p>Build your document with the MPDF tools or write it by hand.</p>
+</div>
+<div class="step">
+<div class="num">2</div>
+<h3>Send</h3>
+<p>Share the .mpdf file via email, chat, or any file transfer.</p>
+</div>
+<div class="step">
+<div class="num">3</div>
+<h3>Open</h3>
+<p>The recipient opens it in any browser. No install needed.</p>
+</div>
+</div>
 </section>
-</article>
+
+<div class="preview-section">
+<div class="preview-container">
+<h2 style="margin-bottom:20px">What it looks like</h2>
+<div class="preview-frame">
+<div class="preview-bar">
+<div class="preview-dot"></div>
+<div class="preview-dot"></div>
+<div class="preview-dot"></div>
+<div class="preview-url">file:///documents/paper.mpdf</div>
+</div>
+<div class="preview-content">
+<h1>MPDF: Media PDF<br>Documents with Animated GIFs</h1>
+<h2>Abstract</h2>
+<p>This document demonstrates the MPDF file format — an open standard for creating portable documents that support embedded animated GIF images.</p>
+<h2>1. Introduction</h2>
+<p>The Portable Document Format has been the standard for document exchange for over three decades. MPDF extends this paradigm with animated GIF support.</p>
+<div class="gif-placeholder">
+<img src="preview.gif" alt="Animated GIF demo" width="120" height="120">
+<div class="caption">Figure 1: An animated gradient bar demonstrating embedded GIF support.</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+
+<section>
+<h2>Format at a glance</h2>
+<table class="format-table">
+<tr><td>&lt;!DOCTYPE mpdf&gt;</td><td>Own doctype — identifies the format</td></tr>
+<tr><td>data-mpdf-version</td><td>Versioned format (currently 1.0)</td></tr>
+<tr><td>mpdf: meta tags</td><td>Standardized metadata (title, author, date)</td></tr>
+<tr><td>mpdf-* CSS classes</td><td>Defined document structure</td></tr>
+<tr><td>Standard stylesheet</td><td>Deterministic rendering everywhere</td></tr>
+<tr><td>No &lt;script&gt;</td><td>Static document format — safe to open</td></tr>
+<tr><td>Base64 data URIs</td><td>All media embedded inline — one file, no dependencies</td></tr>
+</table>
+</section>
+
+<section>
+<h2>Get started</h2>
+<div class="install-grid">
+<div class="install-card">
+<h3>Install via pip</h3>
+<code>pip install mpdf</code>
+</div>
+<div class="install-card">
+<h3>Create a document</h3>
+<code>mpdf create -t "My Paper" -o doc.mpdf \<br>  h1 "Title" text "Hello" gif fig.gif</code>
+</div>
+<div class="install-card">
+<h3>Validate</h3>
+<code>mpdf validate doc.mpdf</code>
+</div>
+</div>
+</section>
+
+<footer>
+<p>MPDF v1.0 — Open Standard — <a href="https://github.com/ruslanadilgereev/mpdf">GitHub</a> — MIT License</p>
+</footer>
+
 </body>
 </html>
