@@ -69,10 +69,31 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .page-content hr{border:none;border-top:1px solid #ccc;margin:2em 0}
 .page-content [contenteditable]:empty::before{content:attr(data-placeholder);color:#bbb;pointer-events:none}
 
+/* ── PDF Page (overlay mode) ── */
+.page-pdf{position:relative;padding:0!important;overflow:hidden;min-height:auto!important}
+.page-pdf .pdf-bg{width:100%;display:block;pointer-events:none;user-select:none}
+.page-pdf .overlay-hint{position:absolute;bottom:12px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.6);color:#fff;padding:6px 16px;border-radius:20px;font-size:12px;font-family:-apple-system,sans-serif;pointer-events:none;opacity:0;transition:opacity 0.3s}
+.page-pdf:hover .overlay-hint{opacity:1}
+
+/* ── GIF Overlay (free-positioned on PDF pages) ── */
+.gif-overlay{position:absolute;cursor:move;border:2px solid transparent;border-radius:4px;transition:border-color 0.15s;z-index:10}
+.gif-overlay:hover,.gif-overlay.selected{border-color:var(--accent);box-shadow:0 2px 12px rgba(79,195,247,0.3)}
+.gif-overlay img{width:100%;height:100%;display:block;border-radius:3px;pointer-events:none}
+.gif-overlay .overlay-caption{position:absolute;bottom:-24px;left:0;right:0;text-align:center;font-size:11px;color:#666;font-style:italic;font-family:Georgia,serif;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.gif-overlay .overlay-delete{position:absolute;top:-10px;right:-10px;width:22px;height:22px;border-radius:50%;background:#ff4757;color:#fff;border:2px solid #fff;cursor:pointer;font-size:13px;display:none;align-items:center;justify-content:center;z-index:20;line-height:1}
+.gif-overlay:hover .overlay-delete,.gif-overlay.selected .overlay-delete{display:flex}
+.gif-overlay .resize-handle{position:absolute;bottom:-5px;right:-5px;width:14px;height:14px;background:var(--accent);border:2px solid #fff;border-radius:2px;cursor:se-resize;z-index:20;display:none}
+.gif-overlay:hover .resize-handle,.gif-overlay.selected .resize-handle{display:block}
+
 /* ── Drop Zone ── */
 .drop-zone{border:2px dashed var(--accent);border-radius:8px;padding:24px;text-align:center;color:var(--accent);font-size:14px;margin:16px 0;background:rgba(79,195,247,0.05);cursor:pointer;transition:all 0.15s}
 .drop-zone:hover,.drop-zone.drag-over{background:rgba(79,195,247,0.12);border-color:var(--accent2)}
 .drop-zone svg{width:32px;height:32px;fill:var(--accent);margin-bottom:8px;display:block;margin:0 auto 8px}
+
+/* PDF page drop zone */
+.page-pdf .pdf-drop-zone{position:absolute;inset:0;z-index:5;display:none;align-items:center;justify-content:center;background:rgba(79,195,247,0.08);border:3px dashed var(--accent)}
+.page-pdf .pdf-drop-zone.active{display:flex}
+.page-pdf .pdf-drop-zone span{background:rgba(0,0,0,0.7);color:#fff;padding:12px 24px;border-radius:8px;font-size:16px;font-family:-apple-system,sans-serif}
 
 /* ── Element Wrapper (draggable) ── */
 .elem-wrap{position:relative;transition:opacity 0.15s,outline 0.15s;border-radius:4px;outline:2px solid transparent}
@@ -342,41 +363,226 @@ class MPDFEditor {
     const scroll = document.getElementById('canvasScroll');
     scroll.innerHTML = '';
     this.pages.forEach((page, pi) => {
+      const isPdfPage = page[0]?.type === 'pdf-bg';
       const pageEl = document.createElement('div');
       pageEl.className = 'page';
       pageEl.style.transform = `scale(${this.zoom})`;
-      pageEl.style.marginBottom = `${(this.zoom - 1) * 1123 + 24}px`;
 
-      const content = document.createElement('div');
-      content.className = 'page-content';
-      content.dataset.pageIndex = pi;
+      if (isPdfPage) {
+        // ── PDF Overlay Mode ──
+        const pdfData = page[0];
+        const content = document.createElement('div');
+        content.className = 'page-content page-pdf';
+        content.dataset.pageIndex = pi;
 
-      page.forEach((el, ei) => {
-        const elem = this.createElementDOM(el, pi, ei);
-        content.appendChild(elem);
-      });
+        // PDF background image
+        const bg = document.createElement('img');
+        bg.className = 'pdf-bg';
+        bg.src = pdfData.src;
+        bg.alt = `PDF Page ${pi + 1}`;
+        bg.draggable = false;
+        content.appendChild(bg);
 
-      // Drop zone at bottom
-      const drop = document.createElement('div');
-      drop.className = 'drop-zone';
-      drop.innerHTML = `<svg viewBox="0 0 24 24"><path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/></svg>Drop GIF here or click to add`;
-      drop.addEventListener('click', () => { this.activePage = pi; this.addGifToPage(); });
-      drop.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('drag-over'); });
-      drop.addEventListener('dragleave', () => drop.classList.remove('drag-over'));
-      drop.addEventListener('drop', e => {
-        e.preventDefault();
-        drop.classList.remove('drag-over');
-        const file = e.dataTransfer.files[0];
-        if (file && file.type === 'image/gif') {
+        // Render GIF overlays
+        (pdfData.overlays || []).forEach((ov, oi) => {
+          const ovEl = this.createOverlayDOM(ov, pi, oi);
+          content.appendChild(ovEl);
+        });
+
+        // Hint text
+        const hint = document.createElement('div');
+        hint.className = 'overlay-hint';
+        hint.textContent = 'Drop GIF anywhere on this page';
+        content.appendChild(hint);
+
+        // Drop zone for GIFs on PDF pages
+        const pdfDrop = document.createElement('div');
+        pdfDrop.className = 'pdf-drop-zone';
+        pdfDrop.innerHTML = '<span>Drop GIF here</span>';
+        content.appendChild(pdfDrop);
+
+        content.addEventListener('dragover', e => {
+          e.preventDefault();
+          if (e.dataTransfer.types.includes('Files')) {
+            pdfDrop.classList.add('active');
+          }
+        });
+        content.addEventListener('dragleave', e => {
+          if (!content.contains(e.relatedTarget)) pdfDrop.classList.remove('active');
+        });
+        content.addEventListener('drop', e => {
+          e.preventDefault();
+          pdfDrop.classList.remove('active');
+          const file = e.dataTransfer.files?.[0];
+          if (file && file.type === 'image/gif') {
+            const rect = content.getBoundingClientRect();
+            const xPct = ((e.clientX - rect.left) / rect.width * 100).toFixed(1);
+            const yPct = ((e.clientY - rect.top) / rect.height * 100).toFixed(1);
+            this.addOverlayGif(pi, file, parseFloat(xPct), parseFloat(yPct));
+          }
+        });
+
+        // Click to add GIF at position
+        content.addEventListener('dblclick', e => {
+          if (e.target.closest('.gif-overlay')) return;
+          const rect = content.getBoundingClientRect();
+          const xPct = ((e.clientX - rect.left) / rect.width * 100).toFixed(1);
+          const yPct = ((e.clientY - rect.top) / rect.height * 100).toFixed(1);
+          this._pendingOverlayPos = { pi, x: parseFloat(xPct), y: parseFloat(yPct) };
           this.activePage = pi;
-          this.insertGifFile(file, '');
-        }
-      });
-      content.appendChild(drop);
+          this.addGifToPage();
+        });
 
-      pageEl.appendChild(content);
+        pageEl.style.width = 'auto';
+        pageEl.style.minHeight = 'auto';
+        pageEl.appendChild(content);
+        pageEl.style.marginBottom = `${24}px`;
+      } else {
+        // ── Normal Text Mode ──
+        pageEl.style.marginBottom = `${(this.zoom - 1) * 1123 + 24}px`;
+        const content = document.createElement('div');
+        content.className = 'page-content';
+        content.dataset.pageIndex = pi;
+
+        page.forEach((el, ei) => {
+          const elem = this.createElementDOM(el, pi, ei);
+          content.appendChild(elem);
+        });
+
+        // Drop zone at bottom
+        const drop = document.createElement('div');
+        drop.className = 'drop-zone';
+        drop.innerHTML = `<svg viewBox="0 0 24 24"><path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/></svg>Drop GIF here or click to add`;
+        drop.addEventListener('click', () => { this.activePage = pi; this.addGifToPage(); });
+        drop.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('drag-over'); });
+        drop.addEventListener('dragleave', () => drop.classList.remove('drag-over'));
+        drop.addEventListener('drop', e => {
+          e.preventDefault();
+          drop.classList.remove('drag-over');
+          const file = e.dataTransfer.files[0];
+          if (file && file.type === 'image/gif') {
+            this.activePage = pi;
+            this.insertGifFile(file, '');
+          }
+        });
+        content.appendChild(drop);
+        pageEl.appendChild(content);
+      }
+
       scroll.appendChild(pageEl);
     });
+  }
+
+  // ── PDF Overlay GIF Management ──
+
+  createOverlayDOM(ov, pageIdx, overlayIdx) {
+    const el = document.createElement('div');
+    el.className = 'gif-overlay';
+    el.style.left = ov.x + '%';
+    el.style.top = ov.y + '%';
+    el.style.width = (ov.w || 20) + '%';
+    el.dataset.overlayIdx = overlayIdx;
+
+    const img = document.createElement('img');
+    img.src = ov.src;
+    img.alt = ov.alt || 'GIF';
+    img.draggable = false;
+    el.appendChild(img);
+
+    if (ov.caption) {
+      const cap = document.createElement('div');
+      cap.className = 'overlay-caption';
+      cap.textContent = ov.caption;
+      el.appendChild(cap);
+    }
+
+    // Delete button
+    const del = document.createElement('button');
+    del.className = 'overlay-delete';
+    del.textContent = '\u00d7';
+    del.addEventListener('click', e => {
+      e.stopPropagation();
+      this.pages[pageIdx][0].overlays.splice(overlayIdx, 1);
+      this.render();
+      this.toast('GIF removed');
+    });
+    el.appendChild(del);
+
+    // Resize handle
+    const resize = document.createElement('div');
+    resize.className = 'resize-handle';
+    resize.addEventListener('mousedown', e => {
+      e.preventDefault();
+      e.stopPropagation();
+      const startX = e.clientX;
+      const startW = el.offsetWidth;
+      const parent = el.parentElement;
+      const parentW = parent.offsetWidth;
+
+      const onMove = e2 => {
+        const newW = startW + (e2.clientX - startX) / this.zoom;
+        const wPct = (newW / parentW * 100).toFixed(1);
+        el.style.width = Math.max(5, Math.min(80, parseFloat(wPct))) + '%';
+      };
+      const onUp = () => {
+        document.removeEventListener('mousemove', onMove);
+        document.removeEventListener('mouseup', onUp);
+        this.pages[pageIdx][0].overlays[overlayIdx].w = parseFloat(el.style.width);
+      };
+      document.addEventListener('mousemove', onMove);
+      document.addEventListener('mouseup', onUp);
+    });
+    el.appendChild(resize);
+
+    // Drag to move
+    el.addEventListener('mousedown', e => {
+      if (e.target === del || e.target === resize) return;
+      e.preventDefault();
+      el.classList.add('selected');
+      const parent = el.parentElement;
+      const parentRect = parent.getBoundingClientRect();
+      const startX = e.clientX;
+      const startY = e.clientY;
+      const startLeft = parseFloat(el.style.left);
+      const startTop = parseFloat(el.style.top);
+
+      const onMove = e2 => {
+        const dx = (e2.clientX - startX) / parentRect.width * 100 / this.zoom;
+        const dy = (e2.clientY - startY) / parentRect.height * 100 / this.zoom;
+        el.style.left = Math.max(0, Math.min(90, startLeft + dx)) + '%';
+        el.style.top = Math.max(0, Math.min(90, startTop + dy)) + '%';
+      };
+      const onUp = () => {
+        document.removeEventListener('mousemove', onMove);
+        document.removeEventListener('mouseup', onUp);
+        el.classList.remove('selected');
+        const ov = this.pages[pageIdx][0].overlays[overlayIdx];
+        ov.x = parseFloat(el.style.left);
+        ov.y = parseFloat(el.style.top);
+      };
+      document.addEventListener('mousemove', onMove);
+      document.addEventListener('mouseup', onUp);
+    });
+
+    return el;
+  }
+
+  addOverlayGif(pageIdx, file, xPct, yPct) {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const overlays = this.pages[pageIdx][0].overlays;
+      overlays.push({
+        src: reader.result,
+        alt: file.name,
+        caption: '',
+        x: Math.max(0, xPct - 10),
+        y: Math.max(0, yPct - 5),
+        w: 25
+      });
+      this.render();
+      this.toast('GIF placed on page!', 'success');
+    };
+    reader.readAsDataURL(file);
   }
 
   createElementDOM(el, pageIdx, elemIdx) {
@@ -762,12 +968,21 @@ class MPDFEditor {
     const reader = new FileReader();
     reader.onload = () => {
       const src = reader.result;
-      this.pages[this.activePage].push({
-        type: 'gif',
-        src: src,
-        alt: file.name,
-        caption: caption || ''
-      });
+      const page = this.pages[this.activePage];
+      const isPdf = page[0]?.type === 'pdf-bg';
+
+      if (isPdf) {
+        // Add as overlay on PDF page
+        const pos = this._pendingOverlayPos || { x: 30, y: 30 };
+        this._pendingOverlayPos = null;
+        page[0].overlays.push({
+          src, alt: file.name, caption: caption || '',
+          x: pos.x, y: pos.y, w: 25
+        });
+      } else {
+        // Add as inline element on text page
+        page.push({ type: 'gif', src, alt: file.name, caption: caption || '' });
+      }
       this.render();
       this.toast('GIF inserted!', 'success');
     };
@@ -994,130 +1209,27 @@ class MPDFEditor {
       this.pages = [];
 
       for (let i = 1; i <= numPages; i++) {
-        status.textContent = `Extracting text from page ${i}/${numPages}...`;
+        status.textContent = `Rendering page ${i}/${numPages}...`;
         const pdfPage = await pdf.getPage(i);
-        const viewport = pdfPage.getViewport({ scale: 1 });
-        const pageHeight = viewport.height;
+        const viewport = pdfPage.getViewport({ scale: 2.5 });
 
-        // Extract text content with positions and font info
-        const textContent = await pdfPage.getTextContent();
-        const items = textContent.items.filter(it => it.str && it.str.trim());
+        const canvas = document.createElement('canvas');
+        canvas.width = viewport.width;
+        canvas.height = viewport.height;
+        await pdfPage.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
 
-        if (items.length === 0) {
-          // Fallback: page has no extractable text (scanned PDF) → render as image
-          status.textContent = `Rendering page ${i}/${numPages} as image...`;
-          const cv = document.createElement('canvas');
-          const vp2 = pdfPage.getViewport({ scale: 2 });
-          cv.width = vp2.width; cv.height = vp2.height;
-          await pdfPage.render({ canvasContext: cv.getContext('2d'), viewport: vp2 }).promise;
-          this.pages.push([
-            { type: 'image', src: cv.toDataURL('image/png', 0.92), alt: `Page ${i}`, caption: '' }
-          ]);
-          continue;
-        }
+        const dataUrl = canvas.toDataURL('image/png', 0.95);
 
-        // Group text items into lines (same Y position ± threshold)
-        const lines = [];
-        const sorted = items.slice().sort((a, b) => {
-          const ay = pageHeight - a.transform[5];
-          const by = pageHeight - b.transform[5];
-          return ay - by || a.transform[4] - b.transform[4];
-        });
-
-        let currentLine = null;
-        for (const item of sorted) {
-          const y = pageHeight - item.transform[5];
-          const fontSize = Math.abs(item.transform[0]) || 12;
-          const lineThreshold = fontSize * 0.5;
-
-          if (!currentLine || Math.abs(y - currentLine.y) > lineThreshold) {
-            currentLine = { y, fontSize, items: [item] };
-            lines.push(currentLine);
-          } else {
-            currentLine.items.push(item);
-            currentLine.fontSize = Math.max(currentLine.fontSize, fontSize);
-          }
-        }
-
-        // Build line texts
-        for (const line of lines) {
-          line.items.sort((a, b) => a.transform[4] - b.transform[4]);
-          line.text = line.items.map(it => it.str).join(' ').replace(/\s+/g, ' ').trim();
-        }
-
-        // Determine the most common font size (body text)
-        const fontSizes = lines.map(l => Math.round(l.fontSize));
-        const fontFreq = {};
-        fontSizes.forEach(s => fontFreq[s] = (fontFreq[s] || 0) + 1);
-        const bodyFontSize = parseInt(Object.entries(fontFreq).sort((a, b) => b[1] - a[1])[0][0]);
-
-        // Group consecutive lines with same style into paragraphs
-        const pageElements = [];
-        let currentParagraph = null;
-
-        for (const line of lines) {
-          if (!line.text) continue;
-          const fs = Math.round(line.fontSize);
-          const isHeading = fs > bodyFontSize * 1.15;
-          const headingLevel = fs > bodyFontSize * 1.6 ? 'h1' : fs > bodyFontSize * 1.3 ? 'h2' : 'h3';
-
-          if (isHeading) {
-            // Flush current paragraph
-            if (currentParagraph) {
-              pageElements.push(currentParagraph);
-              currentParagraph = null;
-            }
-            // Check if we can merge with previous heading of same level
-            const prev = pageElements[pageElements.length - 1];
-            if (prev && prev.type === headingLevel) {
-              prev.text += ' ' + line.text;
-            } else {
-              pageElements.push({ type: headingLevel, text: line.text });
-            }
-          } else {
-            // Body text - merge into paragraph
-            if (!currentParagraph) {
-              currentParagraph = { type: 'p', text: line.text };
-            } else {
-              // Check if this is a new paragraph (large gap from previous line)
-              const prevLine = lines[lines.indexOf(line) - 1];
-              const gap = prevLine ? (line.y - prevLine.y) : 0;
-              const normalLineHeight = bodyFontSize * 1.5;
-
-              if (gap > normalLineHeight * 1.8) {
-                // New paragraph
-                pageElements.push(currentParagraph);
-                currentParagraph = { type: 'p', text: line.text };
-              } else {
-                // Continue paragraph - check if previous line ended with hyphen
-                if (currentParagraph.text.endsWith('-')) {
-                  currentParagraph.text = currentParagraph.text.slice(0, -1) + line.text;
-                } else {
-                  currentParagraph.text += ' ' + line.text;
-                }
-              }
-            }
-          }
-        }
-        if (currentParagraph) pageElements.push(currentParagraph);
-
-        if (pageElements.length > 0) {
-          this.pages.push(pageElements);
-        }
+        // PDF page = background image + overlay GIFs array
+        this.pages.push([
+          { type: 'pdf-bg', src: dataUrl, pdfWidth: viewport.width, pdfHeight: viewport.height, overlays: [] }
+        ]);
       }
-
-      if (this.pages.length === 0) {
-        this.pages.push([{ type: 'p', text: 'No content could be extracted from this PDF.' }]);
-      }
-
-      // Try to detect title from first heading
-      const firstH1 = this.pages[0]?.find(e => e.type === 'h1');
-      if (firstH1) this.title = firstH1.text;
 
       this.activePage = 0;
       this.render();
       this.closeModal('importModal');
-      this.toast(`Imported ${this.pages.length} pages — ${this.pages.reduce((s,p) => s + p.length, 0)} elements extracted!`, 'success');
+      this.toast(`Imported ${numPages} PDF pages — drop GIFs anywhere on them!`, 'success');
     } catch (err) {
       status.textContent = `Error: ${err.message}`;
       console.error(err);
@@ -1140,22 +1252,36 @@ class MPDFEditor {
     let body = '';
     this.pages.forEach((page, pi) => {
       let content = '';
-      page.forEach(el => {
-        if (el.type === 'h1' || el.type === 'h2' || el.type === 'h3') {
-          content += `<${el.type} class="mpdf-heading">${esc(el.text || '')}</${el.type}>\n`;
-        } else if (el.type === 'p') {
-          content += `<p class="mpdf-text">${esc(el.text || '')}</p>\n`;
-        } else if (el.type === 'gif') {
-          const cap = el.caption ? `\n<figcaption>${esc(el.caption)}</figcaption>` : '';
-          content += `<figure class="mpdf-gif">\n<img src="${el.src}" alt="${esc(el.alt || 'Animated GIF')}">${cap}\n</figure>\n`;
-        } else if (el.type === 'image') {
-          const cap = el.caption ? `\n<figcaption>${esc(el.caption)}</figcaption>` : '';
-          content += `<figure class="mpdf-image">\n<img src="${el.src}" alt="${esc(el.alt || 'Image')}">${cap}\n</figure>\n`;
-        } else if (el.type === 'hr') {
-          content += `<hr class="mpdf-separator">\n`;
-        }
-      });
-      body += `<section class="mpdf-page" data-page="${pi + 1}">\n${content}</section>\n`;
+      const isPdf = page[0]?.type === 'pdf-bg';
+
+      if (isPdf) {
+        // PDF overlay page: background image + absolutely positioned GIFs
+        const pdfData = page[0];
+        content += `<img src="${pdfData.src}" alt="Page ${pi + 1}" style="width:100%;display:block">\n`;
+        (pdfData.overlays || []).forEach(ov => {
+          const cap = ov.caption ? `\n<figcaption>${esc(ov.caption)}</figcaption>` : '';
+          content += `<figure class="mpdf-gif" style="position:absolute;left:${ov.x}%;top:${ov.y}%;width:${ov.w || 25}%;margin:0">\n<img src="${ov.src}" alt="${esc(ov.alt || 'GIF')}" style="width:100%">${cap}\n</figure>\n`;
+        });
+        body += `<section class="mpdf-page" data-page="${pi + 1}" style="position:relative;padding:0;min-height:auto">\n${content}</section>\n`;
+      } else {
+        // Normal text page
+        page.forEach(el => {
+          if (el.type === 'h1' || el.type === 'h2' || el.type === 'h3') {
+            content += `<${el.type} class="mpdf-heading">${esc(el.text || '')}</${el.type}>\n`;
+          } else if (el.type === 'p') {
+            content += `<p class="mpdf-text">${esc(el.text || '')}</p>\n`;
+          } else if (el.type === 'gif') {
+            const cap = el.caption ? `\n<figcaption>${esc(el.caption)}</figcaption>` : '';
+            content += `<figure class="mpdf-gif">\n<img src="${el.src}" alt="${esc(el.alt || 'Animated GIF')}">${cap}\n</figure>\n`;
+          } else if (el.type === 'image') {
+            const cap = el.caption ? `\n<figcaption>${esc(el.caption)}</figcaption>` : '';
+            content += `<figure class="mpdf-image">\n<img src="${el.src}" alt="${esc(el.alt || 'Image')}">${cap}\n</figure>\n`;
+          } else if (el.type === 'hr') {
+            content += `<hr class="mpdf-separator">\n`;
+          }
+        });
+        body += `<section class="mpdf-page" data-page="${pi + 1}">\n${content}</section>\n`;
+      }
     });
 
     const mpdf = `<!DOCTYPE mpdf>\n<html data-mpdf-version="1.0">\n<head>\n${meta}\n</head>\n<body>\n<article class="mpdf-document">\n${body}</article>\n</body>\n</html>`;
