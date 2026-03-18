@@ -74,6 +74,20 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .drop-zone:hover,.drop-zone.drag-over{background:rgba(79,195,247,0.12);border-color:var(--accent2)}
 .drop-zone svg{width:32px;height:32px;fill:var(--accent);margin-bottom:8px;display:block;margin:0 auto 8px}
 
+/* ── Element Wrapper (draggable) ── */
+.elem-wrap{position:relative;transition:opacity 0.15s}
+.elem-wrap.dragging{opacity:0.3}
+.elem-wrap .drag-handle{position:absolute;left:-36px;top:50%;transform:translateY(-50%);width:24px;height:24px;cursor:grab;opacity:0;transition:opacity 0.15s;display:flex;align-items:center;justify-content:center;border-radius:4px;color:#999}
+.elem-wrap:hover .drag-handle{opacity:1}
+.drag-handle:hover{background:rgba(79,195,247,0.15);color:var(--accent)}
+.drag-handle:active{cursor:grabbing}
+.elem-wrap .move-buttons{position:absolute;right:-36px;top:50%;transform:translateY(-50%);display:flex;flex-direction:column;gap:2px;opacity:0;transition:opacity 0.15s}
+.elem-wrap:hover .move-buttons{opacity:1}
+.move-btn{width:22px;height:22px;border:none;background:rgba(79,195,247,0.1);color:#999;border-radius:4px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:14px;line-height:1}
+.move-btn:hover{background:var(--accent);color:var(--bg)}
+.drop-indicator{height:3px;background:var(--accent);border-radius:2px;margin:2px 0;display:none;transition:all 0.1s}
+.drop-indicator.active{display:block;box-shadow:0 0 8px rgba(79,195,247,0.5)}
+
 /* ── Element Toolbar ── */
 .element-toolbar{position:absolute;left:-44px;top:0;display:flex;flex-direction:column;gap:4px;opacity:0;transition:opacity 0.15s}
 .page:hover .element-toolbar{opacity:1}
@@ -247,6 +261,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 
 <!-- Context Menu -->
 <div class="context-menu" id="contextMenu">
+  <button onclick="editor.contextAction('moveUp')">Move up</button>
+  <button onclick="editor.contextAction('moveDown')">Move down</button>
+  <hr>
   <button onclick="editor.contextAction('addTextAbove')">Add paragraph above</button>
   <button onclick="editor.contextAction('addTextBelow')">Add paragraph below</button>
   <hr>
@@ -355,9 +372,92 @@ class MPDFEditor {
   }
 
   createElementDOM(el, pageIdx, elemIdx) {
+    // Drop indicator above this element
+    const dropIndicator = document.createElement('div');
+    dropIndicator.className = 'drop-indicator';
+    dropIndicator.dataset.dropIndex = elemIdx;
+    dropIndicator.dataset.dropPage = pageIdx;
+
     const wrapper = document.createElement('div');
+    wrapper.className = 'elem-wrap';
     wrapper.dataset.elemIndex = elemIdx;
-    wrapper.style.position = 'relative';
+    wrapper.dataset.pageIndex = pageIdx;
+
+    // Drag handle (left side)
+    const handle = document.createElement('div');
+    handle.className = 'drag-handle';
+    handle.innerHTML = '&#x2630;';
+    handle.draggable = true;
+    handle.addEventListener('dragstart', e => {
+      e.dataTransfer.setData('text/plain', JSON.stringify({ pageIdx, elemIdx }));
+      e.dataTransfer.effectAllowed = 'move';
+      wrapper.classList.add('dragging');
+      this._dragging = { pageIdx, elemIdx };
+    });
+    handle.addEventListener('dragend', () => {
+      wrapper.classList.remove('dragging');
+      this._dragging = null;
+      document.querySelectorAll('.drop-indicator').forEach(d => d.classList.remove('active'));
+    });
+    wrapper.appendChild(handle);
+
+    // Move buttons (right side)
+    const moveButtons = document.createElement('div');
+    moveButtons.className = 'move-buttons';
+    const moveUp = document.createElement('button');
+    moveUp.className = 'move-btn';
+    moveUp.innerHTML = '&#x25B2;';
+    moveUp.title = 'Move up';
+    moveUp.addEventListener('click', e => { e.stopPropagation(); this.moveElement(pageIdx, elemIdx, -1); });
+    const moveDown = document.createElement('button');
+    moveDown.className = 'move-btn';
+    moveDown.innerHTML = '&#x25BC;';
+    moveDown.title = 'Move down';
+    moveDown.addEventListener('click', e => { e.stopPropagation(); this.moveElement(pageIdx, elemIdx, 1); });
+    moveButtons.appendChild(moveUp);
+    moveButtons.appendChild(moveDown);
+    wrapper.appendChild(moveButtons);
+
+    // Drag over for reordering
+    wrapper.addEventListener('dragover', e => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      if (!this._dragging) return;
+      // Show drop indicator
+      document.querySelectorAll('.drop-indicator').forEach(d => d.classList.remove('active'));
+      const rect = wrapper.getBoundingClientRect();
+      const midY = rect.top + rect.height / 2;
+      if (e.clientY < midY) {
+        dropIndicator.classList.add('active');
+      } else {
+        const nextInd = wrapper.nextElementSibling;
+        if (nextInd && nextInd.classList.contains('drop-indicator')) {
+          nextInd.classList.add('active');
+        }
+      }
+    });
+
+    wrapper.addEventListener('drop', e => {
+      e.preventDefault();
+      e.stopPropagation();
+      document.querySelectorAll('.drop-indicator').forEach(d => d.classList.remove('active'));
+      if (!this._dragging) return;
+      const from = this._dragging;
+      const rect = wrapper.getBoundingClientRect();
+      const midY = rect.top + rect.height / 2;
+      let toIdx = e.clientY < midY ? elemIdx : elemIdx + 1;
+
+      if (from.pageIdx === pageIdx) {
+        this.saveCurrent();
+        const page = this.pages[pageIdx];
+        const [item] = page.splice(from.elemIdx, 1);
+        if (from.elemIdx < toIdx) toIdx--;
+        page.splice(toIdx, 0, item);
+        this.render();
+        this.toast('Element moved', 'success');
+      }
+      this._dragging = null;
+    });
 
     if (el.type === 'gif' || el.type === 'image') {
       const figure = document.createElement('figure');
@@ -412,7 +512,6 @@ class MPDFEditor {
           this.pages[pageIdx][elemIdx].text = tag.textContent;
           this.pages[pageIdx].splice(elemIdx + 1, 0, { type: 'p', text: '' });
           this.render();
-          // Focus new element
           setTimeout(() => {
             const newEl = document.querySelector(`[data-page-index="${pageIdx}"] [data-elem-index="${elemIdx + 1}"] [contenteditable]`);
             if (newEl) newEl.focus();
@@ -429,7 +528,21 @@ class MPDFEditor {
       this.showContextMenu(e.clientX, e.clientY);
     });
 
-    return wrapper;
+    // Return a fragment with drop indicator + wrapper
+    const frag = document.createDocumentFragment();
+    frag.appendChild(dropIndicator);
+    frag.appendChild(wrapper);
+    return frag;
+  }
+
+  moveElement(pageIdx, elemIdx, direction) {
+    this.saveCurrent();
+    const page = this.pages[pageIdx];
+    const newIdx = elemIdx + direction;
+    if (newIdx < 0 || newIdx >= page.length) return;
+    const [item] = page.splice(elemIdx, 1);
+    page.splice(newIdx, 0, item);
+    this.render();
   }
 
   renderThumbnails() {
@@ -566,6 +679,12 @@ class MPDFEditor {
     const { pageIdx, elemIdx } = this.contextTarget;
 
     switch(action) {
+      case 'moveUp':
+        this.moveElement(pageIdx, elemIdx, -1);
+        return;
+      case 'moveDown':
+        this.moveElement(pageIdx, elemIdx, 1);
+        return;
       case 'addTextAbove':
         this.pages[pageIdx].splice(elemIdx, 0, { type: 'p', text: '' });
         break;
